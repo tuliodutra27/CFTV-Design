@@ -27,3 +27,6 @@ next-env.d.ts
 # editor
 .vscode/*
 !.vscode/extensions.json
+
+# claude code (machine-local, syncs to Obsidian via OneDrive)
+.claude/
