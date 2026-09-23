@@ -121,7 +121,8 @@ export default function CctvCanvas({
   }
 
   function handleStageClick(e: Konva.KonvaEventObject<MouseEvent>) {
-    // Só reage a clique no fundo (não em cima de uma câmera existente).
+    // Só reage a clique no fundo (não em cima do círculo de uma câmera existente — o cone de FOV
+    // e o texto do nome têm listening=false justamente pra nunca serem o alvo aqui).
     if (e.target !== e.target.getStage() && e.target.getClassName() !== 'Image' && e.target.getClassName() !== 'Rect') {
       return;
     }
@@ -172,6 +173,7 @@ export default function CctvCanvas({
           return (
             <Group key={camera.id} listening>
               <Line
+                listening={false}
                 points={flattenPoints(sector)}
                 closed
                 fill={color}
@@ -195,7 +197,7 @@ export default function CctvCanvas({
                   onCameraMove?.(camera.id, toMeters(e.target.x()), toMeters(e.target.y()));
                 }}
               />
-              <Text x={px + 8} y={py - 6} text={camera.name} fontSize={12} fill="#e2e8f0" />
+              <Text listening={false} x={px + 8} y={py - 6} text={camera.name} fontSize={12} fill="#e2e8f0" />
             </Group>
           );
         })}

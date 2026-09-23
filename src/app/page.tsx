@@ -36,6 +36,9 @@ export default function Home() {
 
   const [markingMode, setMarkingMode] = useState(false);
   const [markingLocationName, setMarkingLocationName] = useState('');
+  // Só existe enquanto a página está aberta (não persiste) — é só pra guiar a sequência de
+  // marcação; marcar de novo um local já feito não tem problema (idempotente).
+  const [markedLocations, setMarkedLocations] = useState<Set<string>>(new Set());
 
   const loadCameras = useCallback(async () => {
     const res = await fetch('/api/cameras');
@@ -258,11 +261,25 @@ export default function Home() {
       .sort((a, b) => a.name.localeCompare(b.name));
   })();
 
+  function pickNextUnmarkedLocation(afterName: string, marked: Set<string>) {
+    if (locationGroups.length === 0) return afterName;
+    const currentIndex = locationGroups.findIndex((l) => l.name === afterName);
+    for (let step = 1; step <= locationGroups.length; step++) {
+      const candidate = locationGroups[(currentIndex + step) % locationGroups.length];
+      if (!marked.has(candidate.name)) return candidate.name;
+    }
+    return afterName; // todos já marcados
+  }
+
   function handleStartMarking() {
     if (!editMode || locationGroups.length === 0) return;
     setCalibrating(false);
     setMarkingMode(true);
-    setMarkingLocationName(locationGroups[0].name);
+    // Retoma no local em que parou, se ele ainda não tiver sido marcado; senão pega o primeiro
+    // da lista que ainda falta (ou o primeiro de todos, se já passou por todos).
+    if (markingLocationName && !markedLocations.has(markingLocationName)) return;
+    const firstUnmarked = locationGroups.find((l) => !markedLocations.has(l.name));
+    setMarkingLocationName(firstUnmarked ? firstUnmarked.name : locationGroups[0].name);
   }
 
   function handleStopMarking() {
@@ -305,10 +322,11 @@ export default function Home() {
       ),
     );
 
-    const idx = locationGroups.findIndex((l) => l.name === markingLocationName);
-    if (idx >= 0 && idx + 1 < locationGroups.length) {
-      setMarkingLocationName(locationGroups[idx + 1].name);
-    }
+    setMarkedLocations((prev) => {
+      const next = new Set(prev).add(markingLocationName);
+      setMarkingLocationName(pickNextUnmarkedLocation(markingLocationName, next));
+      return next;
+    });
   }
 
   function normalize(value: string) {
@@ -366,7 +384,7 @@ export default function Home() {
           {calibrating
             ? `Calibração: clique em 2 pontos com distância real conhecida (${calibrationPoints.length}/2 marcados)`
             : markingMode
-              ? `Marcando local: clique onde fica "${markingLocationName}" — as câmeras de lá vão se juntar ali`
+              ? `Marcando local (${markedLocations.size}/${locationGroups.length}): clique onde fica "${markingLocationName}" — as câmeras de lá vão se juntar ali`
               : editMode
                 ? `Clique para adicionar câmera · arraste uma câmera para reposicionar · arraste o fundo para navegar · roda do mouse para zoom (${zoomPercent}%)`
                 : `Somente leitura · arraste o fundo para navegar · roda do mouse para zoom (${zoomPercent}%)`}
@@ -501,17 +519,33 @@ export default function Home() {
             }}
           >
             <h2 style={{ fontSize: 13, margin: 0 }}>Marcar local</h2>
-            <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>
-              Escolha um local, clique no mapa onde ele fica — todas as câmeras daquele local se
-              juntam ali perto, num cluster pequeno pra você ajustar depois.
-            </p>
 
             {!markingMode ? (
-              <button onClick={handleStartMarking} style={{ fontSize: 11 }} disabled={calibrating}>
-                Marcar local
-              </button>
+              <>
+                <ol style={{ fontSize: 11, color: '#64748b', margin: 0, paddingLeft: 16 }}>
+                  <li>Clique em &quot;Marcar local&quot; abaixo.</li>
+                  <li>Confira o local mostrado no seletor (já vem escolhido).</li>
+                  <li>
+                    Clique no mapa exatamente onde esse local fica — as câmeras dele pulam pra um
+                    cluster pequeno ali, prontas pra você ajustar uma a uma se precisar.
+                  </li>
+                  <li>Ele já avança pro próximo local sozinho — repete o passo 3.</li>
+                </ol>
+                {markedLocations.size > 0 && (
+                  <p style={{ fontSize: 11, color: '#22c55e', margin: 0 }}>
+                    {markedLocations.size} de {locationGroups.length} locais já marcados.
+                  </p>
+                )}
+                <button onClick={handleStartMarking} style={{ fontSize: 11 }} disabled={calibrating}>
+                  Marcar local
+                </button>
+              </>
             ) : (
               <>
+                <p style={{ fontSize: 11, color: '#facc15', margin: 0 }}>
+                  {markedLocations.size} de {locationGroups.length} marcados — clique no mapa onde
+                  fica o local selecionado abaixo.
+                </p>
                 <label style={{ fontSize: 11, color: '#94a3b8' }}>
                   Local atual
                   <select
@@ -520,6 +554,7 @@ export default function Home() {
                   >
                     {locationGroups.map((l) => (
                       <option key={l.name} value={l.name}>
+                        {markedLocations.has(l.name) ? '(feito) ' : ''}
                         {l.name} ({l.count})
                       </option>
                     ))}
