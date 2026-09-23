@@ -16,14 +16,50 @@ enum CameraStatus {
   MAINTENANCE
 }
 
+enum LensType {
+  FIXED // uma distância focal só
+  VARIFOCAL // lente varifocal manual/motorizada (ex: 2.8-12mm)
+  MOTORIZED_ZOOM // PTZ/speed dome com zoom óptico grande
+}
+
+/// Catálogo de modelos de câmera (fabricante/modelo), com specs ópticos extraídos do datasheet
+/// do fabricante. Importado a partir do device type library do NetBox + pesquisa manual/web.
+/// Serve para autopreencher os defaults de fovAngle/rangeMeters ao cadastrar uma Camera.
+model CameraModel {
+  id String @id @default(cuid())
+
+  manufacturer String
+  model        String
+  slug         String @unique // slug do device type no NetBox
+
+  lensType         LensType? // null quando o modelo não pôde ser identificado com confiança (ver notes)
+  focalLengthMinMm Float?
+  focalLengthMaxMm Float?
+
+  fovHorizontalMaxDeg Float? // FOV na abertura mais larga (foco mínimo), em graus
+  fovHorizontalMinDeg Float? // FOV no zoom máximo (foco máximo), em graus — null se lente fixa
+
+  resolutionMp  Float?
+  irRangeMeters Float? // alcance máximo de IR do datasheet — usado como default de rangeMeters
+
+  datasheetUrl String?
+  notes        String? // ex: variante de lente assumida quando o modelo tem mais de uma opção
+
+  cameras Camera[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 /// Uma câmera posicionada na planta (espaço em metros, calibrado a partir da imagem de fundo — Opção A do planejamento).
 model Camera {
   id String @id @default(cuid())
 
-  code           String  @unique // código/tag interno (ex: patrimônio GLPI, se importado)
-  name           String
-  manufacturer   String?
-  model          String?
+  code String @unique // código/tag interno (ex: patrimônio GLPI, se importado)
+  name String
+
+  cameraModel   CameraModel? @relation(fields: [cameraModelId], references: [id])
+  cameraModelId String?
 
   // Posição em metros, relativa à origem calibrada da imagem de fundo (ver BackgroundMap.scaleMetersPerPixel)
   positionX Float
@@ -31,8 +67,8 @@ model Camera {
 
   installHeight Float? // altura de instalação, em metros
   azimuth       Float // direção para onde a câmera aponta, em graus (0-360, 0 = norte da planta)
-  fovAngle      Float // abertura horizontal da lente, em graus
-  rangeMeters   Float // alcance máximo considerado para o cone de FOV, em metros
+  fovAngle      Float // abertura horizontal da lente, em graus — default vem de cameraModel, editável por câmera
+  rangeMeters   Float // alcance máximo considerado para o cone de FOV, em metros — default vem de cameraModel, editável por câmera
 
   status CameraStatus @default(PLANNED)
 
@@ -41,7 +77,7 @@ model Camera {
   channelRef String?
 
   photoUrl String?
-  notes    String?
+  notes    String? // usado também para guardar a localização "crua" do NetBox até a posição ser calibrada no canvas
 
   glpiAssetId String? // referência ao ativo no GLPI, se a câmera foi importada de lá
 
@@ -51,6 +87,7 @@ model Camera {
   updatedAt DateTime @updatedAt
 
   @@index([status])
+  @@index([cameraModelId])
 }
 
 /// Segmento de linha (parede, pilar, muro) usado para recortar o cone de visibilidade das câmeras (Fase 2).

@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CameraDTO, CameraStatus } from '@/types/camera';
+import type { CameraModelDTO } from '@/types/cameraModel';
 
 // react-konva usa `window`/canvas — precisa ser carregado só no client.
 const CctvCanvas = dynamic(() => import('@/components/map/CctvCanvas'), { ssr: false });
@@ -12,6 +13,7 @@ const DEFAULT_RANGE_METERS = 20;
 
 export default function Home() {
   const [cameras, setCameras] = useState<CameraDTO[]>([]);
+  const [cameraModels, setCameraModels] = useState<CameraModelDTO[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
@@ -24,9 +26,16 @@ export default function Home() {
     setLoading(false);
   }, []);
 
+  const loadCameraModels = useCallback(async () => {
+    const res = await fetch('/api/camera-models');
+    const data = (await res.json()) as CameraModelDTO[];
+    setCameraModels(data);
+  }, []);
+
   useEffect(() => {
     loadCameras();
-  }, [loadCameras]);
+    loadCameraModels();
+  }, [loadCameras, loadCameraModels]);
 
   useEffect(() => {
     function updateSize() {
@@ -79,6 +88,27 @@ export default function Home() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [field]: value }),
+    });
+  }
+
+  async function handleModelChange(id: string, cameraModelId: string) {
+    const model = cameraModels.find((m) => m.id === cameraModelId);
+    // FOV mais largo (foco mínimo) é o mais conservador para estimar cobertura;
+    // alcance de IR do datasheet vira o alcance default do cone.
+    const patch: Partial<CameraDTO> = {
+      cameraModelId: cameraModelId || null,
+      ...(model?.fovHorizontalMaxDeg ? { fovAngle: model.fovHorizontalMaxDeg } : {}),
+      ...(model?.irRangeMeters ? { rangeMeters: model.irRangeMeters } : {}),
+    };
+
+    setCameras((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ...patch, cameraModel: model ?? null } : c)),
+    );
+
+    await fetch(`/api/cameras/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
     });
   }
 
@@ -154,6 +184,21 @@ export default function Home() {
                 onChange={(e) => handleFieldChange(camera.id, 'name', e.target.value)}
                 onBlur={(e) => handleFieldCommit(camera.id, 'name', e.target.value)}
               />
+            </label>
+
+            <label style={{ fontSize: 11, color: '#94a3b8' }}>
+              Modelo
+              <select
+                value={camera.cameraModelId ?? ''}
+                onChange={(e) => handleModelChange(camera.id, e.target.value)}
+              >
+                <option value="">— selecionar —</option>
+                {cameraModels.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.manufacturer} {m.model}
+                  </option>
+                ))}
+              </select>
             </label>
 
             <div style={{ display: 'flex', gap: 6 }}>

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { CameraModelDTO } from './cameraModel';
 
 export const CameraStatusValues = ['PLANNED', 'ACTIVE', 'INACTIVE', 'MAINTENANCE'] as const;
 export type CameraStatus = (typeof CameraStatusValues)[number];
@@ -6,8 +7,7 @@ export type CameraStatus = (typeof CameraStatusValues)[number];
 export const cameraInputSchema = z.object({
   code: z.string().min(1),
   name: z.string().min(1),
-  manufacturer: z.string().optional().nullable(),
-  model: z.string().optional().nullable(),
+  cameraModelId: z.string().optional().nullable(),
   positionX: z.number(),
   positionY: z.number(),
   installHeight: z.number().optional().nullable(),
@@ -27,4 +27,5 @@ export interface CameraDTO extends CameraInput {
   id: string;
   createdAt: string;
   updatedAt: string;
+  cameraModel?: CameraModelDTO | null;
 }

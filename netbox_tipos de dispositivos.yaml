@@ -1,0 +1,479 @@
+manufacturer: Hikvision
+model: DS-2CD1023G2-LIUF/SL
+slug: ds-2cd1023g2-liufsl
+description: "C\xE2mera pequena"
+default_platform: null
+part_number: ''
+u_height: 1.0
+is_full_depth: false
+subdevice_role: null
+airflow: null
+weight: 315.0
+weight_unit: g
+comments: ''
+power-ports:
+- name: PWR
+  type: dc-terminal
+  maximum_draw: 2
+  allocated_draw: 2
+  label: ''
+  description: ''
+interfaces:
+- name: eth
+  type: 100base-tx
+  enabled: true
+  mgmt_only: false
+  label: ''
+  description: ''
+  bridge: null
+  poe_mode: pd
+  poe_type: type2-ieee802.3at
+  rf_role: null
+---
+manufacturer: Hikvision
+model: DS-2CD1041G0-I
+slug: ds-2cd1041g0-i
+description: ''
+default_platform: null
+part_number: ''
+u_height: 1.0
+is_full_depth: false
+subdevice_role: null
+airflow: null
+weight: 175.0
+weight_unit: g
+comments: ''
+power-ports:
+- name: PWR
+  type: dc-terminal
+  maximum_draw: 7
+  allocated_draw: 7
+  label: ''
+  description: ''
+interfaces:
+- name: eth
+  type: 100base-tx
+  enabled: true
+  mgmt_only: false
+  label: ''
+  description: ''
+  bridge: null
+  poe_mode: pd
+  poe_type: type1-ieee802.3af
+  rf_role: null
+---
+manufacturer: Hikvision
+model: DS-2CD1043G1-I
+slug: ds-2cd1043g1-i
+description: ''
+default_platform: null
+part_number: ''
+u_height: 1.0
+is_full_depth: false
+subdevice_role: null
+airflow: null
+weight: 270.0
+weight_unit: g
+comments: ''
+power-ports:
+- name: PWR
+  type: dc-terminal
+  maximum_draw: 7
+  allocated_draw: 7
+  label: ''
+  description: ''
+interfaces:
+- name: eth
+  type: 100base-tx
+  enabled: true
+  mgmt_only: false
+  label: ''
+  description: ''
+  bridge: null
+  poe_mode: pd
+  poe_type: type1-ieee802.3af
+  rf_role: null
+---
+manufacturer: Hikvision
+model: DS-2CD1043G2-I
+slug: ds-2cd1043g2-i
+description: ''
+default_platform: null
+part_number: ''
+u_height: 1.0
+is_full_depth: false
+subdevice_role: null
+airflow: null
+weight: 270.0
+weight_unit: g
+comments: ''
+power-ports:
+- name: PWR
+  type: dc-terminal
+  maximum_draw: 7
+  allocated_draw: 7
+  label: ''
+  description: ''
+interfaces:
+- name: eth
+  type: 100base-tx
+  enabled: true
+  mgmt_only: false
+  label: ''
+  description: ''
+  bridge: null
+  poe_mode: pd
+  poe_type: type1-ieee802.3af
+  rf_role: null
+---
+manufacturer: Hikvision
+model: DS-2CD1043G2-LIUF/SL
+slug: ds-2cd1043g2-liufsl
+description: ''
+default_platform: null
+part_number: ''
+u_height: 1.0
+is_full_depth: false
+subdevice_role: null
+airflow: null
+weight: 315.0
+weight_unit: g
+comments: ''
+power-ports:
+- name: PWR
+  type: dc-terminal
+  maximum_draw: 9
+  allocated_draw: 9
+  label: ''
+  description: ''
+interfaces:
+- name: eth
+  type: 100base-tx
+  enabled: true
+  mgmt_only: false
+  label: ''
+  description: ''
+  bridge: null
+  poe_mode: pd
+  poe_type: type1-ieee802.3af
+  rf_role: null
+---
+manufacturer: Hikvision
+model: DS-2CD2T47G2P-LSU/SL
+slug: ds-2cd2t47g2p-lsusl
+description: https://assets.hikvision.com/prd/public/all/doc/sm000058407/DS-2CD2T47G2P-LSU_SL-C_Datasheet_20240731.pdf
+default_platform: null
+part_number: ''
+u_height: 1.0
+is_full_depth: false
+subdevice_role: null
+airflow: null
+weight: null
+weight_unit: null
+comments: ''
+power-ports:
+- name: pwr
+  type: dc-terminal
+  maximum_draw: 13
+  allocated_draw: 13
+  label: ''
+  description: ''
+interfaces:
+- name: eth
+  type: 100base-tx
+  enabled: true
+  mgmt_only: false
+  label: eth
+  description: ''
+  bridge: null
+  poe_mode: pd
+  poe_type: type2-ieee802.3at
+  rf_role: null
+---
+manufacturer: Hikvision
+model: DS-2CD3066G2-IS
+slug: ds-2cd3066g2-is
+description: ''
+default_platform: null
+part_number: ''
+u_height: 1.0
+is_full_depth: false
+subdevice_role: null
+airflow: null
+weight: 1.0
+weight_unit: kg
+comments: ''
+power-ports:
+- name: PWR
+  type: dc-terminal
+  maximum_draw: 10
+  allocated_draw: 10
+  label: PWR
+  description: ''
+interfaces:
+- name: eth
+  type: 100base-tx
+  enabled: true
+  mgmt_only: false
+  label: ''
+  description: ''
+  bridge: null
+  poe_mode: pd
+  poe_type: type2-ieee802.3at
+  rf_role: null
+---
+manufacturer: Hikvision
+model: DS-2CD3156G2-IS
+slug: ds-2cd3156g2-is
+description: ''
+default_platform: null
+part_number: ''
+u_height: 1.0
+is_full_depth: false
+subdevice_role: null
+airflow: null
+weight: 580.0
+weight_unit: g
+comments: ''
+power-ports:
+- name: PWR
+  type: dc-terminal
+  maximum_draw: 7
+  allocated_draw: 7
+  label: ''
+  description: ''
+interfaces:
+- name: eth
+  type: 100base-tx
+  enabled: true
+  mgmt_only: false
+  label: ''
+  description: ''
+  bridge: null
+  poe_mode: pd
+  poe_type: type1-ieee802.3af
+  rf_role: null
+---
+manufacturer: Hikvision
+model: DS-2CD3656G2T-IZS
+slug: ds-2cd3656g2t-izs
+description: ''
+default_platform: null
+part_number: ''
+u_height: 1.0
+is_full_depth: false
+subdevice_role: null
+airflow: null
+weight: 1330.0
+weight_unit: g
+comments: ''
+power-ports:
+- name: PWR
+  type: dc-terminal
+  maximum_draw: 15
+  allocated_draw: 15
+  label: ''
+  description: ''
+interfaces:
+- name: eth
+  type: 100base-tx
+  enabled: true
+  mgmt_only: false
+  label: ''
+  description: ''
+  bridge: null
+  poe_mode: pd
+  poe_type: type2-ieee802.3at
+  rf_role: null
+---
+manufacturer: Hikvision
+model: DS-2CD3666G2T-IZS
+slug: ds-2cd3666g2t-izs
+description: https://www.hikvision.com/pt-br/products/IP-Products/Network-Cameras/Ultra-Series-SmartIP-/DS-2CD3666G2T-IZS-M/?subName=DS-2CD3666G2T-IZSY%28H%29%287-35mm%29
+default_platform: null
+part_number: ''
+u_height: 1.0
+is_full_depth: false
+subdevice_role: null
+airflow: null
+weight: null
+weight_unit: null
+comments: ''
+power-ports:
+- name: PWR
+  type: dc-terminal
+  maximum_draw: 15
+  allocated_draw: 15
+  label: ''
+  description: ''
+interfaces:
+- name: eth
+  type: 100base-tx
+  enabled: true
+  mgmt_only: false
+  label: ''
+  description: ''
+  bridge: null
+  poe_mode: pd
+  poe_type: type1-ieee802.3af
+  rf_role: null
+---
+manufacturer: Hikvision
+model: DS-2CD3T47EWDV3-L
+slug: ds-2cd3t47ewdv3-l
+description: ''
+default_platform: null
+part_number: ''
+u_height: 1.0
+is_full_depth: false
+subdevice_role: null
+airflow: null
+weight: 625.0
+weight_unit: g
+comments: ''
+power-ports:
+- name: PWR
+  type: dc-terminal
+  maximum_draw: null
+  allocated_draw: null
+  label: ''
+  description: ''
+interfaces:
+- name: eth
+  type: 100base-tx
+  enabled: true
+  mgmt_only: false
+  label: ''
+  description: ''
+  bridge: null
+  poe_mode: pd
+  poe_type: type1-ieee802.3af
+  rf_role: null
+---
+manufacturer: Hikvision
+model: DS-2DE7A432IW-AEB
+slug: ds-2de7a432iw-aeb
+description: ''
+default_platform: null
+part_number: ''
+u_height: 1.0
+is_full_depth: false
+subdevice_role: null
+airflow: null
+weight: 5.0
+weight_unit: kg
+comments: ''
+power-ports:
+- name: PWR
+  type: null
+  maximum_draw: 42
+  allocated_draw: 42
+  label: ''
+  description: ''
+interfaces:
+- name: eth
+  type: 100base-tx
+  enabled: true
+  mgmt_only: false
+  label: ''
+  description: ''
+  bridge: null
+  poe_mode: pd
+  poe_type: type1-ieee802.3af
+  rf_role: null
+---
+manufacturer: Hikvision
+model: DS-2SE4C425MWG-E/26(F0)
+slug: ds-2se4c425mwg-e26f0
+description: ''
+default_platform: null
+part_number: ''
+u_height: 1.0
+is_full_depth: false
+subdevice_role: null
+airflow: null
+weight: 3.0
+weight_unit: kg
+comments: ''
+power-ports:
+- name: PWR
+  type: dc-terminal
+  maximum_draw: 24
+  allocated_draw: 24
+  label: PWR
+  description: ''
+interfaces:
+- name: eth
+  type: 100base-tx
+  enabled: true
+  mgmt_only: false
+  label: ''
+  description: ''
+  bridge: null
+  poe_mode: pd
+  poe_type: type1-ieee802.3af
+  rf_role: null
+---
+manufacturer: Hikvision
+model: iDS-2CD7146G0-IZS
+slug: ids-2cd7146g0-izs
+description: ''
+default_platform: null
+part_number: ''
+u_height: 1.0
+is_full_depth: false
+subdevice_role: null
+airflow: null
+weight: 875.0
+weight_unit: g
+comments: ''
+power-ports:
+- name: PWR
+  type: dc-terminal
+  maximum_draw: 12
+  allocated_draw: 12
+  label: ''
+  description: ''
+interfaces:
+- name: eth
+  type: 1000base-tx
+  enabled: true
+  mgmt_only: false
+  label: ''
+  description: ''
+  bridge: null
+  poe_mode: pd
+  poe_type: type1-ieee802.3af
+  rf_role: null
+---
+manufacturer: Hikvision
+model: iDS-2CD7A46G0/P-IZHS
+slug: ids-2cd7a46g0p-izhs
+description: https://www.hikvision.com/pt-br/products/IP-Products/Network-Cameras/DeepinView-Series/ids-2cd7a46g0-p-izhs-y-/?subName=iDS-2CD7A46G0%2FP-IZHS
+default_platform: null
+part_number: ''
+u_height: 1.0
+is_full_depth: false
+subdevice_role: null
+airflow: null
+weight: null
+weight_unit: null
+comments: ''
+power-ports:
+- name: PWR
+  type: dc-terminal
+  maximum_draw: 15
+  allocated_draw: 15
+  label: ''
+  description: ''
+interfaces:
+- name: eth
+  type: 1000base-tx
+  enabled: true
+  mgmt_only: false
+  label: ''
+  description: ''
+  bridge: null
+  poe_mode: pd
+  poe_type: type2-ieee802.3at
+  rf_role: null

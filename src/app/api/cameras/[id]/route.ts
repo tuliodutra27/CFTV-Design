@@ -17,6 +17,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const camera = await prisma.camera.update({
     where: { id: params.id },
     data: parsed.data,
+    include: { cameraModel: true },
   });
 
   return NextResponse.json(camera);
