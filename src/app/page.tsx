@@ -1,9 +1,11 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { CameraDTO, CameraStatus } from '@/types/camera';
 import type { CameraModelDTO } from '@/types/cameraModel';
+import type { BackgroundMapDTO } from '@/types/backgroundMap';
+import type { Point } from '@/lib/geometry';
 
 // react-konva usa `window`/canvas — precisa ser carregado só no client.
 const CctvCanvas = dynamic(() => import('@/components/map/CctvCanvas'), { ssr: false });
@@ -19,6 +21,13 @@ export default function Home() {
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
 
+  const [backgroundMap, setBackgroundMap] = useState<BackgroundMapDTO | null>(null);
+  const [uploadName, setUploadName] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [calibrating, setCalibrating] = useState(false);
+  const [calibrationPoints, setCalibrationPoints] = useState<Point[]>([]);
+  const [calibrationDistance, setCalibrationDistance] = useState('');
+
   const loadCameras = useCallback(async () => {
     const res = await fetch('/api/cameras');
     const data = (await res.json()) as CameraDTO[];
@@ -32,10 +41,17 @@ export default function Home() {
     setCameraModels(data);
   }, []);
 
+  const loadBackgroundMap = useCallback(async () => {
+    const res = await fetch('/api/background-maps');
+    const data = (await res.json()) as BackgroundMapDTO | null;
+    setBackgroundMap(data);
+  }, []);
+
   useEffect(() => {
     loadCameras();
     loadCameraModels();
-  }, [loadCameras, loadCameraModels]);
+    loadBackgroundMap();
+  }, [loadCameras, loadCameraModels, loadBackgroundMap]);
 
   useEffect(() => {
     function updateSize() {
@@ -118,22 +134,117 @@ export default function Home() {
     await fetch(`/api/cameras/${id}`, { method: 'DELETE' });
   }
 
+  function readImageDimensions(file: File): Promise<{ widthPx: number; heightPx: number }> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve({ widthPx: img.naturalWidth, heightPx: img.naturalHeight });
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Não foi possível ler a imagem'));
+      };
+      img.src = url;
+    });
+  }
+
+  async function handleUploadSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fileInput = form.elements.namedItem('image') as HTMLInputElement;
+    const file = fileInput.files?.[0];
+    if (!file || !uploadName.trim()) return;
+
+    setUploading(true);
+    try {
+      const { widthPx, heightPx } = await readImageDimensions(file);
+      const body = new FormData();
+      body.append('image', file);
+      body.append('name', uploadName.trim());
+      body.append('widthPx', String(widthPx));
+      body.append('heightPx', String(heightPx));
+
+      const res = await fetch('/api/background-maps', { method: 'POST', body });
+      const created = (await res.json()) as BackgroundMapDTO;
+      setBackgroundMap(created);
+      setUploadName('');
+      form.reset();
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function handleStartCalibration() {
+    setCalibrating(true);
+    setCalibrationPoints([]);
+    setCalibrationDistance('');
+  }
+
+  function handleCancelCalibration() {
+    setCalibrating(false);
+    setCalibrationPoints([]);
+    setCalibrationDistance('');
+  }
+
+  function handleCalibrationPoint(pixelX: number, pixelY: number) {
+    setCalibrationPoints((prev) => (prev.length >= 2 ? [{ x: pixelX, y: pixelY }] : [...prev, { x: pixelX, y: pixelY }]));
+  }
+
+  async function handleCalibrationSubmit() {
+    if (!backgroundMap || calibrationPoints.length !== 2) return;
+    const distanceMeters = Number(calibrationDistance);
+    if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) return;
+
+    const [a, b] = calibrationPoints;
+    const pixelDistance = Math.hypot(b.x - a.x, b.y - a.y);
+    const scaleMetersPerPixel = distanceMeters / pixelDistance;
+
+    const res = await fetch(`/api/background-maps/${backgroundMap.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scaleMetersPerPixel }),
+    });
+    const updated = (await res.json()) as BackgroundMapDTO;
+    setBackgroundMap(updated);
+    handleCancelCalibration();
+  }
+
   return (
     <main style={{ display: 'flex', height: '100vh' }}>
-      <div ref={canvasWrapperRef} style={{ flex: 1, position: 'relative' }}>
+      <div ref={canvasWrapperRef} style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
         {!loading && (
           <CctvCanvas
             width={canvasSize.width}
             height={canvasSize.height}
             cameras={cameras}
+            backgroundImageUrl={backgroundMap?.imageUrl}
+            scaleMetersPerPixel={backgroundMap?.scaleMetersPerPixel ?? 1}
             selectedCameraId={selectedId}
             onSelectCamera={setSelectedId}
             onCameraMove={handleCameraMove}
             onCanvasClick={handleCanvasClick}
+            calibrating={calibrating}
+            calibrationPoints={calibrationPoints}
+            onCalibrationPoint={handleCalibrationPoint}
           />
         )}
-        <div style={{ position: 'absolute', top: 12, left: 12, fontSize: 12, color: '#94a3b8' }}>
-          Clique em uma área vazia para adicionar uma câmera · arraste uma câmera para reposicionar
+        <div
+          style={{
+            position: 'absolute',
+            top: 12,
+            left: 12,
+            fontSize: 12,
+            color: calibrating ? '#facc15' : '#94a3b8',
+            background: 'rgba(15, 23, 42, 0.85)',
+            padding: '4px 8px',
+            borderRadius: 4,
+          }}
+        >
+          {calibrating
+            ? `Calibração: clique em 2 pontos com distância real conhecida (${calibrationPoints.length}/2 marcados)`
+            : 'Clique em uma área vazia para adicionar uma câmera · arraste uma câmera para reposicionar'}
         </div>
       </div>
 
@@ -148,6 +259,85 @@ export default function Home() {
           gap: 8,
         }}
       >
+        <section
+          style={{
+            border: '1px solid #1e293b',
+            borderRadius: 6,
+            padding: 8,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          }}
+        >
+          <h2 style={{ fontSize: 13, margin: 0 }}>Mapa de fundo</h2>
+
+          {backgroundMap ? (
+            <>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                {backgroundMap.name} — {backgroundMap.widthPx}×{backgroundMap.heightPx}px
+                <br />
+                Escala: {backgroundMap.scaleMetersPerPixel.toFixed(4)} m/px
+              </div>
+              {!calibrating && (
+                <button onClick={handleStartCalibration} style={{ fontSize: 11 }}>
+                  Calibrar escala
+                </button>
+              )}
+              {calibrating && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {calibrationPoints.length === 2 && (
+                    <label style={{ fontSize: 11, color: '#94a3b8' }}>
+                      Distância real entre os pontos (m)
+                      <input
+                        type="number"
+                        min={0.01}
+                        step="0.01"
+                        value={calibrationDistance}
+                        onChange={(e) => setCalibrationDistance(e.target.value)}
+                        autoFocus
+                      />
+                    </label>
+                  )}
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {calibrationPoints.length === 2 && (
+                      <button onClick={handleCalibrationSubmit} style={{ fontSize: 11, flex: 1 }}>
+                        Salvar calibração
+                      </button>
+                    )}
+                    <button onClick={handleCancelCalibration} style={{ fontSize: 11, flex: 1 }}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>
+              Nenhuma imagem de fundo ainda — as câmeras estão em posições provisórias.
+            </p>
+          )}
+
+          <form
+            onSubmit={handleUploadSubmit}
+            style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid #1e293b', paddingTop: 6 }}
+          >
+            <label style={{ fontSize: 11, color: '#94a3b8' }}>
+              {backgroundMap ? 'Trocar imagem' : 'Enviar imagem'}
+              <input type="file" name="image" accept="image/*" required />
+            </label>
+            <input
+              type="text"
+              placeholder="Nome (ex: Planta drone 2026-09)"
+              value={uploadName}
+              onChange={(e) => setUploadName(e.target.value)}
+              required
+            />
+            <button type="submit" disabled={uploading} style={{ fontSize: 11 }}>
+              {uploading ? 'Enviando...' : 'Enviar'}
+            </button>
+          </form>
+        </section>
+
         <h1 style={{ fontSize: 16, margin: '4px 0 12px' }}>Câmeras ({cameras.length})</h1>
 
         {cameras.map((camera) => (

@@ -37,3 +37,7 @@ CONTEXTO-SESSAO-*.md
 # export de devices do NetBox com IPs internos e números de série — dado sensível,
 # não deve ir pro histórico do git. Copiar manualmente (scp) para onde o import for rodar.
 netbox_cameras.csv
+
+# imagens de fundo enviadas pela UI (fotos de drone/planta) — arquivo binário grande,
+# específico de cada ambiente, não deve ir pro git.
+/public/uploads/
