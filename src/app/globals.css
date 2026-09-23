@@ -1,0 +1,29 @@
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #020617;
+  color: #e2e8f0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+input,
+select {
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+  width: 100%;
+}
+
+button {
+  cursor: pointer;
+}

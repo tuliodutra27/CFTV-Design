@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cftv}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cftv}
+      POSTGRES_DB: ${POSTGRES_DB:-cftv_design}
+    ports:
+      - "5432:5432"
+    volumes:
+      - cftv_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cftv}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://cftv:cftv@db:5432/cftv_design?schema=public}
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true" # necessário para hot-reload funcionar com bind mount no Windows/Docker Desktop
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - cftv_node_modules:/app/node_modules
+      - cftv_next_cache:/app/.next
+
+volumes:
+  cftv_db_data:
+  cftv_node_modules:
+  cftv_next_cache:

@@ -1,0 +1,104 @@
+// Modelo de dados — ver docs/Planejamento-Plataforma-CFTV.md, seção 5.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CameraStatus {
+  PLANNED // planejada, ainda não instalada
+  ACTIVE // instalada e em operação
+  INACTIVE // instalada mas fora de operação
+  MAINTENANCE
+}
+
+/// Uma câmera posicionada na planta (espaço em metros, calibrado a partir da imagem de fundo — Opção A do planejamento).
+model Camera {
+  id String @id @default(cuid())
+
+  code           String  @unique // código/tag interno (ex: patrimônio GLPI, se importado)
+  name           String
+  manufacturer   String?
+  model          String?
+
+  // Posição em metros, relativa à origem calibrada da imagem de fundo (ver BackgroundMap.scaleMetersPerPixel)
+  positionX Float
+  positionY Float
+
+  installHeight Float? // altura de instalação, em metros
+  azimuth       Float // direção para onde a câmera aponta, em graus (0-360, 0 = norte da planta)
+  fovAngle      Float // abertura horizontal da lente, em graus
+  rangeMeters   Float // alcance máximo considerado para o cone de FOV, em metros
+
+  status CameraStatus @default(PLANNED)
+
+  // Integração futura com NVR/VMS (Fase 4) — opcional desde o início, ver seção 5 do planejamento.
+  streamUrl  String?
+  channelRef String?
+
+  photoUrl String?
+  notes    String?
+
+  glpiAssetId String? // referência ao ativo no GLPI, se a câmera foi importada de lá
+
+  coverageZone CoverageZone?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+/// Segmento de linha (parede, pilar, muro) usado para recortar o cone de visibilidade das câmeras (Fase 2).
+model Obstacle {
+  id String @id @default(cuid())
+
+  label String?
+
+  // Segmento de linha em metros, mesmo referencial das câmeras.
+  startX Float
+  startY Float
+  endX   Float
+  endY   Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Polígono de FOV já recortado pelos obstáculos — cache do resultado do visibility-polygon,
+/// recalculado quando a câmera ou algum obstáculo muda (Fase 2).
+model CoverageZone {
+  id String @id @default(cuid())
+
+  camera   Camera @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+  cameraId String @unique
+
+  /// Pontos do polígono já recortado, em metros: [{ "x": number, "y": number }, ...]
+  polygon Json
+
+  areaSquareMeters Float?
+
+  computedAt DateTime @updatedAt
+}
+
+/// Metadados da imagem de fundo (planta/imagem de drone) e sua calibração metro↔pixel.
+model BackgroundMap {
+  id String @id @default(cuid())
+
+  name     String
+  imageUrl String
+
+  widthPx  Int
+  heightPx Int
+
+  // Calibração: distância real (metros) correspondente à distância entre dois pontos clicados na imagem (pixels).
+  scaleMetersPerPixel Float
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+}
