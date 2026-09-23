@@ -46,6 +46,9 @@ interface CctvCanvasProps {
   onScaleChange?: (scale: number) => void;
   /** Ao mudar (nova referência), centraliza a visão nesse ponto (em metros) sem alterar o zoom. */
   centerOnMeters?: Point | null;
+  /** Modo marcar local: clique no fundo reposiciona as câmeras do local selecionado, não cria câmera. */
+  markingMode?: boolean;
+  onLocationMark?: (positionX: number, positionY: number) => void;
 }
 
 export default function CctvCanvas({
@@ -64,6 +67,8 @@ export default function CctvCanvas({
   onCalibrationPoint,
   onScaleChange,
   centerOnMeters,
+  markingMode,
+  onLocationMark,
 }: CctvCanvasProps) {
   const [backgroundImage] = useImage(backgroundImageUrl ?? '');
   const stageRef = useRef<Konva.Stage>(null);
@@ -127,6 +132,8 @@ export default function CctvCanvas({
 
     if (calibrating) {
       onCalibrationPoint?.(pointer.x, pointer.y);
+    } else if (markingMode) {
+      onLocationMark?.(toMeters(pointer.x), toMeters(pointer.y));
     } else if (editMode && onCanvasClick) {
       onCanvasClick(toMeters(pointer.x), toMeters(pointer.y));
     }

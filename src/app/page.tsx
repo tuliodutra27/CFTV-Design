@@ -34,6 +34,9 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [centerTarget, setCenterTarget] = useState<Point | null>(null);
 
+  const [markingMode, setMarkingMode] = useState(false);
+  const [markingLocationName, setMarkingLocationName] = useState('');
+
   const loadCameras = useCallback(async () => {
     const res = await fetch('/api/cameras');
     const data = (await res.json()) as CameraDTO[];
@@ -65,7 +68,10 @@ export default function Home() {
       setCalibrationPoints([]);
       setCalibrationDistance('');
     }
-  }, [editMode, calibrating]);
+    if (!editMode && markingMode) {
+      setMarkingMode(false);
+    }
+  }, [editMode, calibrating, markingMode]);
 
   useEffect(() => {
     function updateSize() {
@@ -198,6 +204,7 @@ export default function Home() {
 
   function handleStartCalibration() {
     if (!editMode) return;
+    setMarkingMode(false);
     setCalibrating(true);
     setCalibrationPoints([]);
     setCalibrationDistance('');
@@ -230,6 +237,78 @@ export default function Home() {
     const updated = (await res.json()) as BackgroundMapDTO;
     setBackgroundMap(updated);
     handleCancelCalibration();
+  }
+
+  // As câmeras importadas do NetBox guardam a localização crua em notes: "Local (NetBox): <site>"
+  // (opcionalmente seguido de " | Obs: ...") — usado tanto na busca quanto no modo "marcar local".
+  function parseLocation(notes: string | null | undefined): string | null {
+    if (!notes) return null;
+    const match = notes.match(/^Local \(NetBox\): (.+?)(?: \| Obs:|$)/);
+    return match ? match[1] : null;
+  }
+
+  const locationGroups = (() => {
+    const counts = new Map<string, number>();
+    for (const camera of cameras) {
+      const location = parseLocation(camera.notes);
+      if (location) counts.set(location, (counts.get(location) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
+  function handleStartMarking() {
+    if (!editMode || locationGroups.length === 0) return;
+    setCalibrating(false);
+    setMarkingMode(true);
+    setMarkingLocationName(locationGroups[0].name);
+  }
+
+  function handleStopMarking() {
+    setMarkingMode(false);
+  }
+
+  // Reposiciona, num cluster pequeno em volta do ponto clicado, todas as câmeras cuja localização
+  // (do NetBox) bate com a selecionada — assim não precisa arrastar câmera por câmera.
+  async function handleLocationMark(centerX: number, centerY: number) {
+    if (!editMode || !markingLocationName) return;
+    const matching = cameras.filter((c) => parseLocation(c.notes) === markingLocationName);
+    if (matching.length === 0) return;
+
+    const SPACING_METERS = 4;
+    const cols = Math.min(4, matching.length);
+    const rows = Math.ceil(matching.length / cols);
+    const offsetX = ((cols - 1) * SPACING_METERS) / 2;
+    const offsetY = ((rows - 1) * SPACING_METERS) / 2;
+
+    const updates = matching.map((camera, i) => ({
+      id: camera.id,
+      positionX: centerX + (i % cols) * SPACING_METERS - offsetX,
+      positionY: centerY + Math.floor(i / cols) * SPACING_METERS - offsetY,
+    }));
+
+    setCameras((prev) =>
+      prev.map((c) => {
+        const update = updates.find((u) => u.id === c.id);
+        return update ? { ...c, positionX: update.positionX, positionY: update.positionY } : c;
+      }),
+    );
+
+    await Promise.all(
+      updates.map((u) =>
+        fetch(`/api/cameras/${u.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ positionX: u.positionX, positionY: u.positionY }),
+        }),
+      ),
+    );
+
+    const idx = locationGroups.findIndex((l) => l.name === markingLocationName);
+    if (idx >= 0 && idx + 1 < locationGroups.length) {
+      setMarkingLocationName(locationGroups[idx + 1].name);
+    }
   }
 
   function normalize(value: string) {
@@ -268,6 +347,8 @@ export default function Home() {
             onCalibrationPoint={handleCalibrationPoint}
             onScaleChange={(scale) => setZoomPercent(Math.round(scale * 100))}
             centerOnMeters={centerTarget}
+            markingMode={markingMode}
+            onLocationMark={handleLocationMark}
           />
         )}
         <div
@@ -276,7 +357,7 @@ export default function Home() {
             top: 12,
             left: 12,
             fontSize: 12,
-            color: calibrating ? '#facc15' : '#94a3b8',
+            color: calibrating || markingMode ? '#facc15' : '#94a3b8',
             background: 'rgba(15, 23, 42, 0.85)',
             padding: '4px 8px',
             borderRadius: 4,
@@ -284,9 +365,11 @@ export default function Home() {
         >
           {calibrating
             ? `Calibração: clique em 2 pontos com distância real conhecida (${calibrationPoints.length}/2 marcados)`
-            : editMode
-              ? `Clique para adicionar câmera · arraste uma câmera para reposicionar · arraste o fundo para navegar · roda do mouse para zoom (${zoomPercent}%)`
-              : `Somente leitura · arraste o fundo para navegar · roda do mouse para zoom (${zoomPercent}%)`}
+            : markingMode
+              ? `Marcando local: clique onde fica "${markingLocationName}" — as câmeras de lá vão se juntar ali`
+              : editMode
+                ? `Clique para adicionar câmera · arraste uma câmera para reposicionar · arraste o fundo para navegar · roda do mouse para zoom (${zoomPercent}%)`
+                : `Somente leitura · arraste o fundo para navegar · roda do mouse para zoom (${zoomPercent}%)`}
         </div>
       </div>
 
@@ -405,6 +488,50 @@ export default function Home() {
             </form>
           )}
         </section>
+
+        {editMode && locationGroups.length > 0 && (
+          <section
+            style={{
+              border: '1px solid #1e293b',
+              borderRadius: 6,
+              padding: 8,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+            }}
+          >
+            <h2 style={{ fontSize: 13, margin: 0 }}>Marcar local</h2>
+            <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>
+              Escolha um local, clique no mapa onde ele fica — todas as câmeras daquele local se
+              juntam ali perto, num cluster pequeno pra você ajustar depois.
+            </p>
+
+            {!markingMode ? (
+              <button onClick={handleStartMarking} style={{ fontSize: 11 }} disabled={calibrating}>
+                Marcar local
+              </button>
+            ) : (
+              <>
+                <label style={{ fontSize: 11, color: '#94a3b8' }}>
+                  Local atual
+                  <select
+                    value={markingLocationName}
+                    onChange={(e) => setMarkingLocationName(e.target.value)}
+                  >
+                    {locationGroups.map((l) => (
+                      <option key={l.name} value={l.name}>
+                        {l.name} ({l.count})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button onClick={handleStopMarking} style={{ fontSize: 11 }}>
+                  Concluir marcação
+                </button>
+              </>
+            )}
+          </section>
+        )}
 
         <h1 style={{ fontSize: 16, margin: '4px 0 12px' }}>
           Câmeras ({filteredCameras.length}
