@@ -65,7 +65,23 @@ const cameraModels = [
     irRangeMeters: null,
     datasheetUrl: null,
     notes:
-      'ATENÇÃO: SKU "-IS" não encontrado em nenhum datasheet/site oficial Hikvision — provável erro de digitação no NetBox. A família 1043G2 bullet só existe oficialmente como DS-2CD1043G2-I, -I(UF) e -LIU(F)/SL. Se for DS-2CD1043G2-I(UF): variante 2.8mm tem FOV 99°, 4MP, IR até 30m. Confirmar o modelo real antes de usar este registro.',
+      'Confirmado pelo Tulio (2026-09): é um modelo DIFERENTE do DS-2CD1043G2-I, mesma família mas carcaça (e specs menores) diferentes — não é erro de digitação. Nenhuma câmera real da base atual usa esse SKU ainda (0/350 no export do NetBox); specs próprios ainda não pesquisados.',
+  },
+  {
+    manufacturer: 'Hikvision',
+    model: 'DS-2CD1043G2-I',
+    slug: 'ds-2cd1043g2-i',
+    lensType: 'FIXED',
+    focalLengthMinMm: 2.8,
+    focalLengthMaxMm: 2.8,
+    fovHorizontalMaxDeg: 99,
+    fovHorizontalMinDeg: null,
+    resolutionMp: 4,
+    irRangeMeters: 30,
+    datasheetUrl:
+      'https://assets.hikvision.com/prd/public/all/doc/sm000041022/DS-2CD1043G2-IUF_Datasheet_V5.7.1_20230425.pdf',
+    notes:
+      'Vendida em variantes 2.8mm e 4mm; escolhida 2.8mm (FOV 99°). Variante 4mm: FOV 76°. Datasheet oficial cobre DS-2CD1043G2-I e -I(UF) juntos (mesma ótica — "-UF" só adiciona microfone), com "DS-2CD1043G2-I (2.8/4 mm)" listado como SKU próprio na seção Available Model.',
   },
   {
     manufacturer: 'Hikvision',

@@ -33,3 +33,7 @@ next-env.d.ts
 
 # notas de sessão do Claude Code (contexto local, não versionado)
 CONTEXTO-SESSAO-*.md
+
+# export de devices do NetBox com IPs internos e números de série — dado sensível,
+# não deve ir pro histórico do git. Copiar manualmente (scp) para onde o import for rodar.
+netbox_cameras.csv
