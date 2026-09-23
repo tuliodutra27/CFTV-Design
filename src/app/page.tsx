@@ -165,7 +165,10 @@ export default function Home() {
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <strong style={{ fontSize: 13 }}>{camera.code}</strong>
+              <div>
+                <strong style={{ fontSize: 13 }}>{camera.name}</strong>
+                <div style={{ fontSize: 10, color: '#64748b' }}>{camera.code}</div>
+              </div>
               <button
                 onClick={(e) => {
                   e.stopPropagation();

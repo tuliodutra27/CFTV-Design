@@ -100,7 +100,7 @@ export default function CctvCanvas({
               <Text
                 x={camera.positionX + 8}
                 y={camera.positionY - 6}
-                text={camera.code}
+                text={camera.name}
                 fontSize={12}
                 fill="#e2e8f0"
               />
