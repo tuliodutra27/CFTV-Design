@@ -13,7 +13,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "node prisma/seed.js",
-    "import:cameras": "node prisma/import-cameras.js"
+    "import:cameras": "node prisma/import-cameras.js",
+    "db:reset-cameras": "node prisma/reset-cameras.js"
   },
   "dependencies": {
     "next": "^14.2.35",
