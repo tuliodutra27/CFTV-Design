@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Stage, Layer, Group, Image as KonvaImage, Circle, Line, Text, Rect } from 'react-konva';
 import type Konva from 'konva';
 import useImage from 'use-image';
@@ -29,6 +29,8 @@ interface CctvCanvasProps {
   backgroundImageUrl?: string;
   /** Metros por pixel da imagem de fundo — 1 (sem conversão) quando não há mapa calibrado ainda. */
   scaleMetersPerPixel: number;
+  /** Somente leitura quando false: câmeras não são arrastáveis e clique no fundo não cria câmera. */
+  editMode: boolean;
   selectedCameraId?: string | null;
   onSelectCamera?: (id: string) => void;
   /** Posição em metros (já convertida — o chamador não precisa saber da escala). */
@@ -42,6 +44,8 @@ interface CctvCanvasProps {
   onCalibrationPoint?: (pixelX: number, pixelY: number) => void;
   /** Notifica o zoom atual (só pra exibição — o zoom/pan em si é interno ao componente). */
   onScaleChange?: (scale: number) => void;
+  /** Ao mudar (nova referência), centraliza a visão nesse ponto (em metros) sem alterar o zoom. */
+  centerOnMeters?: Point | null;
 }
 
 export default function CctvCanvas({
@@ -50,6 +54,7 @@ export default function CctvCanvas({
   cameras,
   backgroundImageUrl,
   scaleMetersPerPixel,
+  editMode,
   selectedCameraId,
   onSelectCamera,
   onCameraMove,
@@ -58,12 +63,25 @@ export default function CctvCanvas({
   calibrationPoints = [],
   onCalibrationPoint,
   onScaleChange,
+  centerOnMeters,
 }: CctvCanvasProps) {
   const [backgroundImage] = useImage(backgroundImageUrl ?? '');
   const stageRef = useRef<Konva.Stage>(null);
 
   const toPx = (meters: number) => meters / scaleMetersPerPixel;
   const toMeters = (pixels: number) => pixels * scaleMetersPerPixel;
+
+  useEffect(() => {
+    if (!centerOnMeters) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    const scale = stage.scaleX();
+    stage.position({
+      x: width / 2 - (centerOnMeters.x / scaleMetersPerPixel) * scale,
+      y: height / 2 - (centerOnMeters.y / scaleMetersPerPixel) * scale,
+    });
+    stage.batchDraw();
+  }, [centerOnMeters, scaleMetersPerPixel, width, height]);
 
   // Zoom com a roda do mouse, centralizado no ponteiro (padrão Konva) — manipula o Stage
   // diretamente via ref, sem guardar escala/posição em estado React (evita brigar com o drag nativo).
@@ -109,7 +127,7 @@ export default function CctvCanvas({
 
     if (calibrating) {
       onCalibrationPoint?.(pointer.x, pointer.y);
-    } else if (onCanvasClick) {
+    } else if (editMode && onCanvasClick) {
       onCanvasClick(toMeters(pointer.x), toMeters(pointer.y));
     }
   }
@@ -161,7 +179,7 @@ export default function CctvCanvas({
                 fill={color}
                 stroke="#0f172a"
                 strokeWidth={1}
-                draggable
+                draggable={editMode}
                 onClick={(e) => {
                   e.cancelBubble = true;
                   onSelectCamera?.(camera.id);

@@ -29,6 +29,11 @@ export default function Home() {
   const [calibrationDistance, setCalibrationDistance] = useState('');
   const [zoomPercent, setZoomPercent] = useState(100);
 
+  // Sempre abre em somente-leitura — precisa clicar em "editar" pra evitar edição acidental.
+  const [editMode, setEditMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [centerTarget, setCenterTarget] = useState<Point | null>(null);
+
   const loadCameras = useCallback(async () => {
     const res = await fetch('/api/cameras');
     const data = (await res.json()) as CameraDTO[];
@@ -55,6 +60,14 @@ export default function Home() {
   }, [loadCameras, loadCameraModels, loadBackgroundMap]);
 
   useEffect(() => {
+    if (!editMode && calibrating) {
+      setCalibrating(false);
+      setCalibrationPoints([]);
+      setCalibrationDistance('');
+    }
+  }, [editMode, calibrating]);
+
+  useEffect(() => {
     function updateSize() {
       const el = canvasWrapperRef.current;
       if (el) {
@@ -67,6 +80,7 @@ export default function Home() {
   }, []);
 
   async function handleCanvasClick(positionX: number, positionY: number) {
+    if (!editMode) return;
     const code = `CAM-${String(cameras.length + 1).padStart(3, '0')}`;
     const res = await fetch('/api/cameras', {
       method: 'POST',
@@ -88,6 +102,7 @@ export default function Home() {
   }
 
   async function handleCameraMove(id: string, positionX: number, positionY: number) {
+    if (!editMode) return;
     setCameras((prev) => prev.map((c) => (c.id === id ? { ...c, positionX, positionY } : c)));
     await fetch(`/api/cameras/${id}`, {
       method: 'PATCH',
@@ -101,6 +116,7 @@ export default function Home() {
   }
 
   async function handleFieldCommit(id: string, field: keyof CameraDTO, value: string | number) {
+    if (!editMode) return;
     await fetch(`/api/cameras/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -109,6 +125,7 @@ export default function Home() {
   }
 
   async function handleModelChange(id: string, cameraModelId: string) {
+    if (!editMode) return;
     const model = cameraModels.find((m) => m.id === cameraModelId);
     // FOV mais largo (foco mínimo) é o mais conservador para estimar cobertura;
     // alcance de IR do datasheet vira o alcance default do cone.
@@ -130,6 +147,7 @@ export default function Home() {
   }
 
   async function handleDelete(id: string) {
+    if (!editMode) return;
     setCameras((prev) => prev.filter((c) => c.id !== id));
     if (selectedId === id) setSelectedId(null);
     await fetch(`/api/cameras/${id}`, { method: 'DELETE' });
@@ -153,6 +171,7 @@ export default function Home() {
 
   async function handleUploadSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!editMode) return;
     const form = e.currentTarget;
     const fileInput = form.elements.namedItem('image') as HTMLInputElement;
     const file = fileInput.files?.[0];
@@ -178,6 +197,7 @@ export default function Home() {
   }
 
   function handleStartCalibration() {
+    if (!editMode) return;
     setCalibrating(true);
     setCalibrationPoints([]);
     setCalibrationDistance('');
@@ -212,6 +232,22 @@ export default function Home() {
     handleCancelCalibration();
   }
 
+  function normalize(value: string) {
+    return value.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+  }
+
+  const trimmedQuery = normalize(searchQuery.trim());
+  const filteredCameras = trimmedQuery
+    ? cameras.filter((c) =>
+        [c.name, c.code, c.notes ?? ''].some((field) => normalize(field).includes(trimmedQuery)),
+      )
+    : cameras;
+
+  function handleSelectCamera(camera: CameraDTO) {
+    setSelectedId(camera.id);
+    setCenterTarget({ x: camera.positionX, y: camera.positionY });
+  }
+
   return (
     <main style={{ display: 'flex', height: '100vh' }}>
       <div ref={canvasWrapperRef} style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
@@ -222,6 +258,7 @@ export default function Home() {
             cameras={cameras}
             backgroundImageUrl={backgroundMap?.imageUrl}
             scaleMetersPerPixel={backgroundMap?.scaleMetersPerPixel ?? 1}
+            editMode={editMode}
             selectedCameraId={selectedId}
             onSelectCamera={setSelectedId}
             onCameraMove={handleCameraMove}
@@ -230,6 +267,7 @@ export default function Home() {
             calibrationPoints={calibrationPoints}
             onCalibrationPoint={handleCalibrationPoint}
             onScaleChange={(scale) => setZoomPercent(Math.round(scale * 100))}
+            centerOnMeters={centerTarget}
           />
         )}
         <div
@@ -246,7 +284,9 @@ export default function Home() {
         >
           {calibrating
             ? `Calibração: clique em 2 pontos com distância real conhecida (${calibrationPoints.length}/2 marcados)`
-            : `Clique para adicionar câmera · arraste uma câmera para reposicionar · arraste o fundo para navegar · roda do mouse para zoom (${zoomPercent}%)`}
+            : editMode
+              ? `Clique para adicionar câmera · arraste uma câmera para reposicionar · arraste o fundo para navegar · roda do mouse para zoom (${zoomPercent}%)`
+              : `Somente leitura · arraste o fundo para navegar · roda do mouse para zoom (${zoomPercent}%)`}
         </div>
       </div>
 
@@ -261,6 +301,30 @@ export default function Home() {
           gap: 8,
         }}
       >
+        <button
+          onClick={() => setEditMode((prev) => !prev)}
+          style={{
+            padding: '8px 12px',
+            fontSize: 13,
+            fontWeight: 600,
+            borderRadius: 6,
+            border: editMode ? '1px solid #22c55e' : '1px solid #475569',
+            background: editMode ? 'rgba(34,197,94,0.15)' : 'rgba(71,85,105,0.15)',
+            color: editMode ? '#22c55e' : '#cbd5e1',
+            cursor: 'pointer',
+          }}
+        >
+          {editMode ? 'Editando — clique para bloquear' : 'Somente leitura — clique para editar'}
+        </button>
+
+        <input
+          type="text"
+          placeholder="Buscar câmera (nome, serial, local)..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{ fontSize: 12, padding: '6px 8px' }}
+        />
+
         <section
           style={{
             border: '1px solid #1e293b',
@@ -280,7 +344,7 @@ export default function Home() {
                 <br />
                 Escala: {backgroundMap.scaleMetersPerPixel.toFixed(4)} m/px
               </div>
-              {!calibrating && (
+              {editMode && !calibrating && (
                 <button onClick={handleStartCalibration} style={{ fontSize: 11 }}>
                   Calibrar escala
                 </button>
@@ -319,33 +383,38 @@ export default function Home() {
             </p>
           )}
 
-          <form
-            onSubmit={handleUploadSubmit}
-            style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid #1e293b', paddingTop: 6 }}
-          >
-            <label style={{ fontSize: 11, color: '#94a3b8' }}>
-              {backgroundMap ? 'Trocar imagem' : 'Enviar imagem'}
-              <input type="file" name="image" accept="image/*" required />
-            </label>
-            <input
-              type="text"
-              placeholder="Nome (ex: Planta drone 2026-09)"
-              value={uploadName}
-              onChange={(e) => setUploadName(e.target.value)}
-              required
-            />
-            <button type="submit" disabled={uploading} style={{ fontSize: 11 }}>
-              {uploading ? 'Enviando...' : 'Enviar'}
-            </button>
-          </form>
+          {editMode && (
+            <form
+              onSubmit={handleUploadSubmit}
+              style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid #1e293b', paddingTop: 6 }}
+            >
+              <label style={{ fontSize: 11, color: '#94a3b8' }}>
+                {backgroundMap ? 'Trocar imagem' : 'Enviar imagem'}
+                <input type="file" name="image" accept="image/*" required />
+              </label>
+              <input
+                type="text"
+                placeholder="Nome (ex: Planta drone 2026-09)"
+                value={uploadName}
+                onChange={(e) => setUploadName(e.target.value)}
+                required
+              />
+              <button type="submit" disabled={uploading} style={{ fontSize: 11 }}>
+                {uploading ? 'Enviando...' : 'Enviar'}
+              </button>
+            </form>
+          )}
         </section>
 
-        <h1 style={{ fontSize: 16, margin: '4px 0 12px' }}>Câmeras ({cameras.length})</h1>
+        <h1 style={{ fontSize: 16, margin: '4px 0 12px' }}>
+          Câmeras ({filteredCameras.length}
+          {searchQuery ? ` de ${cameras.length}` : ''})
+        </h1>
 
-        {cameras.map((camera) => (
+        {filteredCameras.map((camera) => (
           <div
             key={camera.id}
-            onClick={() => setSelectedId(camera.id)}
+            onClick={() => handleSelectCamera(camera)}
             style={{
               border: camera.id === selectedId ? '1px solid #38bdf8' : '1px solid #1e293b',
               borderRadius: 6,
@@ -361,21 +430,24 @@ export default function Home() {
                 <strong style={{ fontSize: 13 }}>{camera.name}</strong>
                 <div style={{ fontSize: 10, color: '#64748b' }}>{camera.code}</div>
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(camera.id);
-                }}
-                style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: 12 }}
-              >
-                remover
-              </button>
+              {editMode && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(camera.id);
+                  }}
+                  style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: 12 }}
+                >
+                  remover
+                </button>
+              )}
             </div>
 
             <label style={{ fontSize: 11, color: '#94a3b8' }}>
               Nome
               <input
                 value={camera.name}
+                disabled={!editMode}
                 onChange={(e) => handleFieldChange(camera.id, 'name', e.target.value)}
                 onBlur={(e) => handleFieldCommit(camera.id, 'name', e.target.value)}
               />
@@ -385,6 +457,7 @@ export default function Home() {
               Modelo
               <select
                 value={camera.cameraModelId ?? ''}
+                disabled={!editMode}
                 onChange={(e) => handleModelChange(camera.id, e.target.value)}
               >
                 <option value="">— selecionar —</option>
@@ -404,6 +477,7 @@ export default function Home() {
                   min={0}
                   max={360}
                   value={camera.azimuth}
+                  disabled={!editMode}
                   onChange={(e) => handleFieldChange(camera.id, 'azimuth', Number(e.target.value))}
                   onBlur={(e) => handleFieldCommit(camera.id, 'azimuth', Number(e.target.value))}
                 />
@@ -415,6 +489,7 @@ export default function Home() {
                   min={1}
                   max={360}
                   value={camera.fovAngle}
+                  disabled={!editMode}
                   onChange={(e) => handleFieldChange(camera.id, 'fovAngle', Number(e.target.value))}
                   onBlur={(e) => handleFieldCommit(camera.id, 'fovAngle', Number(e.target.value))}
                 />
@@ -428,6 +503,7 @@ export default function Home() {
                   type="number"
                   min={1}
                   value={camera.rangeMeters}
+                  disabled={!editMode}
                   onChange={(e) => handleFieldChange(camera.id, 'rangeMeters', Number(e.target.value))}
                   onBlur={(e) => handleFieldCommit(camera.id, 'rangeMeters', Number(e.target.value))}
                 />
@@ -436,6 +512,7 @@ export default function Home() {
                 Status
                 <select
                   value={camera.status}
+                  disabled={!editMode}
                   onChange={(e) => {
                     const value = e.target.value as CameraStatus;
                     handleFieldChange(camera.id, 'status', value);
@@ -454,8 +531,12 @@ export default function Home() {
 
         {!loading && cameras.length === 0 && (
           <p style={{ fontSize: 12, color: '#64748b' }}>
-            Nenhuma câmera cadastrada ainda. Clique no canvas à esquerda para adicionar a primeira.
+            Nenhuma câmera cadastrada ainda.{editMode && ' Clique no canvas à esquerda para adicionar a primeira.'}
           </p>
+        )}
+
+        {!loading && cameras.length > 0 && filteredCameras.length === 0 && (
+          <p style={{ fontSize: 12, color: '#64748b' }}>Nenhuma câmera encontrada para &quot;{searchQuery}&quot;.</p>
         )}
       </aside>
     </main>
