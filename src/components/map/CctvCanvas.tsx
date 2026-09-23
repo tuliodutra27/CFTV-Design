@@ -14,6 +14,14 @@ const STATUS_COLORS: Record<string, string> = {
   MAINTENANCE: '#f59e0b',
 };
 
+const MIN_SCALE = 0.02;
+const MAX_SCALE = 10;
+const ZOOM_SPEED = 1.05;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
 interface CctvCanvasProps {
   width: number;
   height: number;
@@ -32,6 +40,8 @@ interface CctvCanvasProps {
   /** Pontos de calibração já marcados, em pixels da imagem. */
   calibrationPoints?: Point[];
   onCalibrationPoint?: (pixelX: number, pixelY: number) => void;
+  /** Notifica o zoom atual (só pra exibição — o zoom/pan em si é interno ao componente). */
+  onScaleChange?: (scale: number) => void;
 }
 
 export default function CctvCanvas({
@@ -47,17 +57,45 @@ export default function CctvCanvas({
   calibrating,
   calibrationPoints = [],
   onCalibrationPoint,
+  onScaleChange,
 }: CctvCanvasProps) {
   const [backgroundImage] = useImage(backgroundImageUrl ?? '');
   const stageRef = useRef<Konva.Stage>(null);
 
-  // A imagem de fundo é renderizada em resolução nativa (sem esticar) — o Stage acompanha o
-  // tamanho dela pra permitir rolar/panorâmica; sem imagem, cai no tamanho do container.
-  const stageWidth = backgroundImage?.width ?? width;
-  const stageHeight = backgroundImage?.height ?? height;
-
   const toPx = (meters: number) => meters / scaleMetersPerPixel;
   const toMeters = (pixels: number) => pixels * scaleMetersPerPixel;
+
+  // Zoom com a roda do mouse, centralizado no ponteiro (padrão Konva) — manipula o Stage
+  // diretamente via ref, sem guardar escala/posição em estado React (evita brigar com o drag nativo).
+  function handleWheel(e: Konva.KonvaEventObject<WheelEvent>) {
+    e.evt.preventDefault();
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const oldScale = stage.scaleX();
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+
+    const mousePointTo = {
+      x: (pointer.x - stage.x()) / oldScale,
+      y: (pointer.y - stage.y()) / oldScale,
+    };
+
+    const direction = e.evt.deltaY > 0 ? -1 : 1;
+    const newScale = clamp(
+      direction > 0 ? oldScale * ZOOM_SPEED : oldScale / ZOOM_SPEED,
+      MIN_SCALE,
+      MAX_SCALE,
+    );
+
+    stage.scale({ x: newScale, y: newScale });
+    stage.position({
+      x: pointer.x - mousePointTo.x * newScale,
+      y: pointer.y - mousePointTo.y * newScale,
+    });
+    stage.batchDraw();
+    onScaleChange?.(newScale);
+  }
 
   function handleStageClick(e: Konva.KonvaEventObject<MouseEvent>) {
     // Só reage a clique no fundo (não em cima de uma câmera existente).
@@ -65,7 +103,8 @@ export default function CctvCanvas({
       return;
     }
     const stage = stageRef.current;
-    const pointer = stage?.getPointerPosition();
+    // Relativo ao conteúdo (já descontando o zoom/pan atual do Stage), não à tela.
+    const pointer = stage?.getRelativePointerPosition();
     if (!pointer) return;
 
     if (calibrating) {
@@ -76,12 +115,19 @@ export default function CctvCanvas({
   }
 
   return (
-    <Stage ref={stageRef} width={stageWidth} height={stageHeight} onClick={handleStageClick}>
+    <Stage
+      ref={stageRef}
+      width={width}
+      height={height}
+      draggable
+      onWheel={handleWheel}
+      onClick={handleStageClick}
+    >
       <Layer>
         {backgroundImage ? (
           <KonvaImage image={backgroundImage} />
         ) : (
-          <Rect x={0} y={0} width={stageWidth} height={stageHeight} fill="#0f172a" />
+          <Rect x={0} y={0} width={width} height={height} fill="#0f172a" />
         )}
       </Layer>
 

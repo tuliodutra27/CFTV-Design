@@ -27,6 +27,7 @@ export default function Home() {
   const [calibrating, setCalibrating] = useState(false);
   const [calibrationPoints, setCalibrationPoints] = useState<Point[]>([]);
   const [calibrationDistance, setCalibrationDistance] = useState('');
+  const [zoomPercent, setZoomPercent] = useState(100);
 
   const loadCameras = useCallback(async () => {
     const res = await fetch('/api/cameras');
@@ -213,7 +214,7 @@ export default function Home() {
 
   return (
     <main style={{ display: 'flex', height: '100vh' }}>
-      <div ref={canvasWrapperRef} style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
+      <div ref={canvasWrapperRef} style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         {!loading && (
           <CctvCanvas
             width={canvasSize.width}
@@ -228,6 +229,7 @@ export default function Home() {
             calibrating={calibrating}
             calibrationPoints={calibrationPoints}
             onCalibrationPoint={handleCalibrationPoint}
+            onScaleChange={(scale) => setZoomPercent(Math.round(scale * 100))}
           />
         )}
         <div
@@ -244,7 +246,7 @@ export default function Home() {
         >
           {calibrating
             ? `Calibração: clique em 2 pontos com distância real conhecida (${calibrationPoints.length}/2 marcados)`
-            : 'Clique em uma área vazia para adicionar uma câmera · arraste uma câmera para reposicionar'}
+            : `Clique para adicionar câmera · arraste uma câmera para reposicionar · arraste o fundo para navegar · roda do mouse para zoom (${zoomPercent}%)`}
         </div>
       </div>
 
