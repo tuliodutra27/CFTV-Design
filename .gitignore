@@ -30,3 +30,6 @@ next-env.d.ts
 
 # claude code (machine-local, syncs to Obsidian via OneDrive)
 .claude/
+
+# notas de sessão do Claude Code (contexto local, não versionado)
+CONTEXTO-SESSAO-*.md
