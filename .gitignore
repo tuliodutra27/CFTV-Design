@@ -41,3 +41,6 @@ netbox_cameras.csv
 # imagens de fundo enviadas pela UI (fotos de drone/planta) — arquivo binário grande,
 # específico de cada ambiente, não deve ir pro git.
 /public/uploads/
+
+# dumps de backup do banco (scripts/backup-db.sh) — dado real de produção, não deve ir pro git.
+/backups/

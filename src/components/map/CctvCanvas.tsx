@@ -18,8 +18,30 @@ const MIN_SCALE = 0.02;
 const MAX_SCALE = 10;
 const ZOOM_SPEED = 1.05;
 
+// Cores pra distinguir cones de câmeras vizinhas quando um filtro de área está ativo — evita
+// verde/vermelho/amarelo/cinza (já usados pelo status) e o amarelo de calibração/marcação.
+const FOCUS_PALETTE = [
+  '#38bdf8', // sky
+  '#a78bfa', // violet
+  '#fb7185', // rose
+  '#2dd4bf', // teal
+  '#fb923c', // orange
+  '#c084fc', // purple
+  '#f472b6', // pink
+  '#60a5fa', // blue
+  '#e879f9', // fuchsia
+  '#34d399', // emerald
+];
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+export interface Bounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 interface CctvCanvasProps {
@@ -49,6 +71,10 @@ interface CctvCanvasProps {
   /** Modo marcar local: clique no fundo reposiciona as câmeras do local selecionado, não cria câmera. */
   markingMode?: boolean;
   onLocationMark?: (positionX: number, positionY: number) => void;
+  /** Quando definido, câmeras fora do conjunto ficam esmaecidas e as de dentro ganham cor própria. */
+  focusedCameraIds?: Set<string> | null;
+  /** Ao mudar (nova referência, em metros), ajusta zoom+posição pra enquadrar essa área. */
+  fitBoundsMeters?: Bounds | null;
 }
 
 export default function CctvCanvas({
@@ -69,6 +95,8 @@ export default function CctvCanvas({
   centerOnMeters,
   markingMode,
   onLocationMark,
+  focusedCameraIds = null,
+  fitBoundsMeters,
 }: CctvCanvasProps) {
   const [backgroundImage] = useImage(backgroundImageUrl ?? '');
   const stageRef = useRef<Konva.Stage>(null);
@@ -87,6 +115,33 @@ export default function CctvCanvas({
     });
     stage.batchDraw();
   }, [centerOnMeters, scaleMetersPerPixel, width, height]);
+
+  useEffect(() => {
+    if (!fitBoundsMeters) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const boundsWidthPx = fitBoundsMeters.width / scaleMetersPerPixel;
+    const boundsHeightPx = fitBoundsMeters.height / scaleMetersPerPixel;
+    if (boundsWidthPx <= 0 || boundsHeightPx <= 0) return;
+
+    const PADDING = 0.85; // deixa uma margem em volta da área, não cola nas bordas
+    const newScale = clamp(
+      Math.min((width * PADDING) / boundsWidthPx, (height * PADDING) / boundsHeightPx),
+      MIN_SCALE,
+      MAX_SCALE,
+    );
+    const centerXPx = (fitBoundsMeters.x + fitBoundsMeters.width / 2) / scaleMetersPerPixel;
+    const centerYPx = (fitBoundsMeters.y + fitBoundsMeters.height / 2) / scaleMetersPerPixel;
+
+    stage.scale({ x: newScale, y: newScale });
+    stage.position({
+      x: width / 2 - centerXPx * newScale,
+      y: height / 2 - centerYPx * newScale,
+    });
+    stage.batchDraw();
+    onScaleChange?.(newScale);
+  }, [fitBoundsMeters, scaleMetersPerPixel, width, height]);
 
   // Zoom com a roda do mouse, centralizado no ponteiro (padrão Konva) — manipula o Stage
   // diretamente via ref, sem guardar escala/posição em estado React (evita brigar com o drag nativo).
@@ -158,49 +213,68 @@ export default function CctvCanvas({
       </Layer>
 
       <Layer>
-        {cameras.map((camera) => {
-          const sector = computeFovSector(
-            { x: camera.positionX, y: camera.positionY },
-            camera.azimuth,
-            camera.fovAngle,
-            camera.rangeMeters,
-          ).map((p) => ({ x: toPx(p.x), y: toPx(p.y) }));
-          const color = STATUS_COLORS[camera.status] ?? STATUS_COLORS.PLANNED;
-          const isSelected = camera.id === selectedCameraId;
-          const px = toPx(camera.positionX);
-          const py = toPx(camera.positionY);
+        {(() => {
+          let nextFocusColorIndex = 0;
+          return cameras.map((camera) => {
+            const sector = computeFovSector(
+              { x: camera.positionX, y: camera.positionY },
+              camera.azimuth,
+              camera.fovAngle,
+              camera.rangeMeters,
+            ).map((p) => ({ x: toPx(p.x), y: toPx(p.y) }));
+            const statusColor = STATUS_COLORS[camera.status] ?? STATUS_COLORS.PLANNED;
+            const isSelected = camera.id === selectedCameraId;
+            const px = toPx(camera.positionX);
+            const py = toPx(camera.positionY);
 
-          return (
-            <Group key={camera.id} listening>
-              <Line
-                listening={false}
-                points={flattenPoints(sector)}
-                closed
-                fill={color}
-                opacity={isSelected ? 0.35 : 0.18}
-                stroke={color}
-                strokeWidth={isSelected ? 2 : 1}
-              />
-              <Circle
-                x={px}
-                y={py}
-                radius={isSelected ? 7 : 5}
-                fill={color}
-                stroke="#0f172a"
-                strokeWidth={1}
-                draggable={editMode}
-                onClick={(e) => {
-                  e.cancelBubble = true;
-                  onSelectCamera?.(camera.id);
-                }}
-                onDragEnd={(e) => {
-                  onCameraMove?.(camera.id, toMeters(e.target.x()), toMeters(e.target.y()));
-                }}
-              />
-              <Text listening={false} x={px + 8} y={py - 6} text={camera.name} fontSize={12} fill="#e2e8f0" />
-            </Group>
-          );
-        })}
+            const isFocused = focusedCameraIds?.has(camera.id) ?? false;
+            const isDimmed = focusedCameraIds != null && !isFocused;
+            const focusColor = isFocused
+              ? FOCUS_PALETTE[nextFocusColorIndex++ % FOCUS_PALETTE.length]
+              : null;
+
+            return (
+              <Group key={camera.id} listening>
+                <Line
+                  listening={false}
+                  points={flattenPoints(sector)}
+                  closed
+                  fill={focusColor ?? statusColor}
+                  opacity={isDimmed ? 0.04 : isFocused ? 0.45 : isSelected ? 0.35 : 0.18}
+                  stroke={focusColor ?? statusColor}
+                  strokeWidth={isFocused ? 2.5 : isSelected ? 2 : 1}
+                  dash={isFocused ? [10, 6] : undefined}
+                />
+                <Circle
+                  x={px}
+                  y={py}
+                  radius={isSelected ? 7 : 5}
+                  fill={statusColor}
+                  stroke="#0f172a"
+                  strokeWidth={1}
+                  opacity={isDimmed ? 0.15 : 1}
+                  draggable={editMode}
+                  onClick={(e) => {
+                    e.cancelBubble = true;
+                    onSelectCamera?.(camera.id);
+                  }}
+                  onDragEnd={(e) => {
+                    onCameraMove?.(camera.id, toMeters(e.target.x()), toMeters(e.target.y()));
+                  }}
+                />
+                <Text
+                  listening={false}
+                  x={px + 8}
+                  y={py - 6}
+                  text={camera.name}
+                  fontSize={12}
+                  fill="#e2e8f0"
+                  opacity={isDimmed ? 0.15 : 1}
+                />
+              </Group>
+            );
+          });
+        })()}
       </Layer>
 
       {calibrating && (

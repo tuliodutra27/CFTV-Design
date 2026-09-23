@@ -6,6 +6,7 @@ import type { CameraDTO, CameraStatus } from '@/types/camera';
 import type { CameraModelDTO } from '@/types/cameraModel';
 import type { BackgroundMapDTO } from '@/types/backgroundMap';
 import type { Point } from '@/lib/geometry';
+import type { Bounds } from '@/components/map/CctvCanvas';
 
 // react-konva usa `window`/canvas — precisa ser carregado só no client.
 const CctvCanvas = dynamic(() => import('@/components/map/CctvCanvas'), { ssr: false });
@@ -39,6 +40,9 @@ export default function Home() {
   // Só existe enquanto a página está aberta (não persiste) — é só pra guiar a sequência de
   // marcação; marcar de novo um local já feito não tem problema (idempotente).
   const [markedLocations, setMarkedLocations] = useState<Set<string>>(new Set());
+
+  const [viewFilterLocation, setViewFilterLocation] = useState<string | null>(null);
+  const [fitBounds, setFitBounds] = useState<Bounds | null>(null);
 
   const loadCameras = useCallback(async () => {
     const res = await fetch('/api/cameras');
@@ -329,6 +333,33 @@ export default function Home() {
     });
   }
 
+  // Filtra a visualização por área: esmaece as demais câmeras e enquadra o zoom nessa área
+  // (usando o alcance de cada câmera, não só a posição, pra caber o cone inteiro na tela).
+  function handleViewFilterChange(locationName: string) {
+    if (!locationName) {
+      setViewFilterLocation(null);
+      setFitBounds(null);
+      return;
+    }
+    setViewFilterLocation(locationName);
+    const matching = cameras.filter((c) => parseLocation(c.notes) === locationName);
+    if (matching.length === 0) {
+      setFitBounds(null);
+      return;
+    }
+    const minX = Math.min(...matching.map((c) => c.positionX - c.rangeMeters));
+    const maxX = Math.max(...matching.map((c) => c.positionX + c.rangeMeters));
+    const minY = Math.min(...matching.map((c) => c.positionY - c.rangeMeters));
+    const maxY = Math.max(...matching.map((c) => c.positionY + c.rangeMeters));
+    setFitBounds({ x: minX, y: minY, width: Math.max(maxX - minX, 1), height: Math.max(maxY - minY, 1) });
+  }
+
+  const focusedCameraIds = viewFilterLocation
+    ? new Set(
+        cameras.filter((c) => parseLocation(c.notes) === viewFilterLocation).map((c) => c.id),
+      )
+    : null;
+
   function normalize(value: string) {
     return value.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
   }
@@ -367,6 +398,8 @@ export default function Home() {
             centerOnMeters={centerTarget}
             markingMode={markingMode}
             onLocationMark={handleLocationMark}
+            focusedCameraIds={focusedCameraIds}
+            fitBoundsMeters={fitBounds}
           />
         )}
         <div
@@ -425,6 +458,24 @@ export default function Home() {
           onChange={(e) => setSearchQuery(e.target.value)}
           style={{ fontSize: 12, padding: '6px 8px' }}
         />
+
+        {locationGroups.length > 0 && (
+          <label style={{ fontSize: 11, color: '#94a3b8' }}>
+            Filtrar área (destaca só as câmeras de lá, com cores diferentes)
+            <select
+              value={viewFilterLocation ?? ''}
+              onChange={(e) => handleViewFilterChange(e.target.value)}
+              style={{ fontSize: 12 }}
+            >
+              <option value="">Ver todas as áreas</option>
+              {locationGroups.map((l) => (
+                <option key={l.name} value={l.name}>
+                  {l.name} ({l.count})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <section
           style={{

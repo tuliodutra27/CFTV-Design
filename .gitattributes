@@ -1,0 +1,3 @@
+# Scripts rodam no servidor Linux — shebang (#!/bin/sh) quebra se a quebra de linha virar CRLF
+# ao serem editados/commitados a partir do Windows (core.autocrlf).
+*.sh text eol=lf
