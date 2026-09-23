@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cftv}
       POSTGRES_DB: ${POSTGRES_DB:-cftv_design}
     ports:
-      - "5432:5432"
+      - "5032:5432"
     volumes:
       - cftv_db_data:/var/lib/postgresql/data
     healthcheck:
