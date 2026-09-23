@@ -11,7 +11,7 @@ services:
     volumes:
       - cftv_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cftv}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cftv} -d ${POSTGRES_DB:-cftv_design}"]
       interval: 5s
       timeout: 5s
       retries: 10
