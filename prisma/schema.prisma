@@ -122,6 +122,20 @@ model CoverageZone {
   computedAt DateTime @updatedAt
 }
 
+/// Cor de destaque do cone de alcance das câmeras ativas no mapa. Não existe tabela de usuários
+/// (autenticação é via AD, sem persistir linha no banco — ver src/lib/session.ts) então a linha é
+/// identificada pelo username do AD; a linha global (definida por um admin, vale pra quem nunca
+/// escolheu cor própria) usa o username sentinela "__global__". Prioridade de leitura: pessoal >
+/// global > padrão fixo no frontend (ver src/lib/colors.ts).
+model RangeColorSetting {
+  id String @id @default(cuid())
+
+  username String @unique // "__global__" = padrão definido por um admin; senão, sAMAccountName do AD
+  color    String // hex de 6 dígitos, ex: "#22c55e"
+
+  updatedAt DateTime @updatedAt
+}
+
 /// Metadados da imagem de fundo (planta/imagem de drone) e sua calibração metro↔pixel.
 model BackgroundMap {
   id String @id @default(cuid())

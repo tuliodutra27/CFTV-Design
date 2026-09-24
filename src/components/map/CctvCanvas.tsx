@@ -6,7 +6,10 @@ import type Konva from 'konva';
 import useImage from 'use-image';
 import { computeFovSector, flattenPoints, type Point } from '@/lib/geometry';
 import type { CameraDTO } from '@/types/camera';
+import { DEFAULT_RANGE_COLOR } from '@/lib/colors';
 
+// Cor do ponto de status de cada câmera — semântica fixa (verde=ativa, vermelho=inativa etc.),
+// não é a mesma coisa que a cor do cone (essa sim configurável, ver rangeColor).
 const STATUS_COLORS: Record<string, string> = {
   PLANNED: '#94a3b8',
   ACTIVE: '#22c55e',
@@ -83,6 +86,8 @@ interface CctvCanvasProps {
   focusedCameraIds?: Set<string> | null;
   /** Ao mudar (nova referência, em metros), ajusta zoom+posição pra enquadrar essa área. */
   fitBoundsMeters?: Bounds | null;
+  /** Cor do cone das câmeras ativas (preferência pessoal ou global do usuário) — configurável. */
+  rangeColor?: string;
 }
 
 export default function CctvCanvas({
@@ -105,6 +110,7 @@ export default function CctvCanvas({
   onLocationMark,
   focusedCameraIds = null,
   fitBoundsMeters,
+  rangeColor = DEFAULT_RANGE_COLOR,
 }: CctvCanvasProps) {
   const [backgroundImage] = useImage(backgroundImageUrl ?? '');
   const stageRef = useRef<Konva.Stage>(null);
@@ -241,7 +247,10 @@ export default function CctvCanvas({
               ? FOCUS_PALETTE[nextFocusColorIndex++ % FOCUS_PALETTE.length]
               : null;
             const isInoperative = isInoperativeStatus(camera.status);
-            const coneColor = focusColor ?? (isInoperative ? INOPERATIVE_CONE_COLOR : statusColor);
+            // Só o cone das câmeras ativas usa a cor configurável — o ponto de status (abaixo) e o
+            // cone de PLANNED/inoperativa continuam com a paleta fixa de status.
+            const defaultConeColor = camera.status === 'ACTIVE' ? rangeColor : statusColor;
+            const coneColor = focusColor ?? (isInoperative ? INOPERATIVE_CONE_COLOR : defaultConeColor);
 
             return (
               <Group key={camera.id} listening>

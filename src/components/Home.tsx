@@ -10,12 +10,19 @@ import type { Point } from '@/lib/geometry';
 import type { Bounds } from '@/components/map/CctvCanvas';
 import type { Role } from '@/lib/session';
 import MenuSection from '@/components/layout/MenuSection';
+import { DEFAULT_RANGE_COLOR } from '@/lib/colors';
 
 // react-konva usa `window`/canvas — precisa ser carregado só no client.
 const CctvCanvas = dynamic(() => import('@/components/map/CctvCanvas'), { ssr: false });
 
 const DEFAULT_FOV_ANGLE = 90;
 const DEFAULT_RANGE_METERS = 20;
+
+type RangeColorScope = 'personal' | 'global' | 'default';
+interface RangeColorResponse {
+  color: string;
+  scope: RangeColorScope;
+}
 
 interface HomeProps {
   role: Role;
@@ -62,6 +69,10 @@ export default function Home({ role, userName }: HomeProps) {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  const [rangeColor, setRangeColor] = useState(DEFAULT_RANGE_COLOR);
+  const [rangeColorScope, setRangeColorScope] = useState<RangeColorScope>('default');
+  const [savingRangeColor, setSavingRangeColor] = useState(false);
+
   const loadCameras = useCallback(async () => {
     const res = await fetch('/api/cameras');
     const data = (await res.json()) as CameraDTO[];
@@ -81,11 +92,19 @@ export default function Home({ role, userName }: HomeProps) {
     setBackgroundMap(data);
   }, []);
 
+  const loadRangeColor = useCallback(async () => {
+    const res = await fetch('/api/settings/range-color');
+    const data = (await res.json()) as RangeColorResponse;
+    setRangeColor(data.color);
+    setRangeColorScope(data.scope);
+  }, []);
+
   useEffect(() => {
     loadCameras();
     loadCameraModels();
     loadBackgroundMap();
-  }, [loadCameras, loadCameraModels, loadBackgroundMap]);
+    loadRangeColor();
+  }, [loadCameras, loadCameraModels, loadBackgroundMap, loadRangeColor]);
 
   useEffect(() => {
     if (!editMode && calibrating) {
@@ -421,6 +440,37 @@ export default function Home({ role, userName }: HomeProps) {
     setCameraModels((prev) => prev.map((m) => (m.id === modelId ? updated : m)));
     if (applyInput.checked) {
       loadCameras();
+    }
+  }
+
+  // Não depende de editMode: é preferência do usuário (pessoal ou global, se admin), não dado da
+  // câmera — Operador precisa poder mexer mesmo sem nunca entrar em modo de edição.
+  async function handleRangeColorChange(color: string) {
+    setRangeColor(color);
+    setSavingRangeColor(true);
+    try {
+      const res = await fetch('/api/settings/range-color', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ color }),
+      });
+      const data = (await res.json()) as RangeColorResponse;
+      setRangeColor(data.color);
+      setRangeColorScope(data.scope);
+    } finally {
+      setSavingRangeColor(false);
+    }
+  }
+
+  async function handleResetRangeColor() {
+    setSavingRangeColor(true);
+    try {
+      const res = await fetch('/api/settings/range-color', { method: 'DELETE' });
+      const data = (await res.json()) as RangeColorResponse;
+      setRangeColor(data.color);
+      setRangeColorScope(data.scope);
+    } finally {
+      setSavingRangeColor(false);
     }
   }
 
@@ -904,6 +954,58 @@ export default function Home({ role, userName }: HomeProps) {
               </MenuSection>
 
               <MenuSection icon="⚙" label="Configurações">
+                <div
+                  style={{
+                    border: '1px solid #1e293b',
+                    borderRadius: 6,
+                    padding: 8,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                  }}
+                >
+                  <h3 style={{ fontSize: 12, margin: 0 }}>Cor de destaque do alcance</h3>
+                  <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>
+                    Cor do cone de alcance das câmeras ativas no mapa.{' '}
+                    {role === 'admin'
+                      ? 'Como administrador, sua escolha vira o padrão pra todo mundo que ainda não tiver uma cor própria.'
+                      : 'Isso muda só a sua visualização, sem afetar outros usuários.'}
+                  </p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="color"
+                      value={rangeColor}
+                      onChange={(e) => handleRangeColorChange(e.target.value)}
+                      style={{
+                        width: 36,
+                        height: 28,
+                        padding: 0,
+                        border: '1px solid #1e293b',
+                        borderRadius: 4,
+                        background: 'transparent',
+                        cursor: 'pointer',
+                      }}
+                    />
+                    <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                      {savingRangeColor
+                        ? 'Salvando...'
+                        : rangeColorScope === 'personal'
+                          ? 'Sua cor pessoal'
+                          : rangeColorScope === 'global'
+                            ? 'Cor padrão (definida por um admin)'
+                            : 'Cor padrão do sistema'}
+                    </span>
+                  </div>
+                  {rangeColorScope === 'personal' && (
+                    <button
+                      onClick={handleResetRangeColor}
+                      style={{ fontSize: 11, alignSelf: 'flex-start' }}
+                    >
+                      Usar a cor padrão
+                    </button>
+                  )}
+                </div>
+
                 <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>
                   Ajusta os defaults de FOV/alcance de cada modelo do catálogo (afeta o
                   autopreenchimento ao selecionar o modelo numa câmera).
@@ -1011,6 +1113,7 @@ export default function Home({ role, userName }: HomeProps) {
             onLocationMark={handleLocationMark}
             focusedCameraIds={focusedCameraIds}
             fitBoundsMeters={fitBounds}
+            rangeColor={rangeColor}
           />
         )}
         <div
