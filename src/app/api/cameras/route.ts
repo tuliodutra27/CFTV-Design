@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cameraInputSchema } from '@/types/camera';
 import { isAuthError, requireAdminSession } from '@/lib/getSession';
-import { maybeCreateCheckpoint } from '@/lib/checkpoint';
+import { createCheckpoint } from '@/lib/checkpoint';
 
 export async function GET() {
   const cameras = await prisma.camera.findMany({
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  await maybeCreateCheckpoint(session.username, () => `Nova câmera criada (${parsed.data.code})`);
+  await createCheckpoint(`Nova câmera criada (${parsed.data.code})`, session.username);
 
   const camera = await prisma.camera.create({
     data: parsed.data,

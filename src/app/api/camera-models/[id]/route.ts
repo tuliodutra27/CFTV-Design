@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { isAuthError, requireAdminSession } from '@/lib/getSession';
-import { maybeCreateCheckpoint } from '@/lib/checkpoint';
+import { createCheckpoint } from '@/lib/checkpoint';
 
 const patchSchema = z.object({
   fovHorizontalMaxDeg: z.number().positive().nullable().optional(),
@@ -32,13 +32,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   const { applyToExistingCameras, ...data } = parsed.data;
 
-  await maybeCreateCheckpoint(session.username, async () => {
-    const current = await prisma.cameraModel.findUnique({
-      where: { id: params.id },
-      select: { manufacturer: true, model: true },
-    });
-    return `Modelo "${current ? `${current.manufacturer} ${current.model}` : params.id}" atualizado`;
+  const beforeEdit = await prisma.cameraModel.findUnique({
+    where: { id: params.id },
+    select: { manufacturer: true, model: true },
   });
+  await createCheckpoint(
+    `Modelo "${beforeEdit ? `${beforeEdit.manufacturer} ${beforeEdit.model}` : params.id}" atualizado`,
+    session.username,
+  );
 
   const model = await prisma.cameraModel.update({
     where: { id: params.id },

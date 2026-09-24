@@ -1,14 +1,10 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
-// Ações em sequência (vários campos de uma câmera editados em blur, ou o modo "marcar local"
-// disparando um PATCH por câmera do cluster) não geram um checkpoint cada uma — só a primeira
-// dentro dessa janela vira um ponto de restauração, já que ela captura o estado "antes" de todo o
-// grupo. Passado esse intervalo, a próxima alteração já abre um checkpoint novo.
-const COALESCE_WINDOW_MS = 10_000;
-
 // Limite de retenção — evita a tabela crescer sem fim; os mais antigos vão sendo descartados.
-const MAX_CHECKPOINTS = 200;
+// Cada alteração (mesmo simples, tipo um campo só) grava um checkpoint próprio — sem agrupamento —
+// então esse número sobe rápido; 1000 dá bastante margem antes de começar a descartar histórico.
+const MAX_CHECKPOINTS = 1000;
 
 export interface CheckpointSnapshot {
   cameras: Prisma.CameraCreateManyInput[];
@@ -38,30 +34,11 @@ async function pruneOldCheckpoints() {
   await prisma.checkpoint.deleteMany({ where: { id: { in: stale.map((c) => c.id) } } });
 }
 
-/** Sempre cria um checkpoint novo, ignorando a janela de agrupamento — usado antes de um restore. */
+/** Grava um checkpoint com o estado atual — chame ANTES de aplicar a mutação. */
 export async function createCheckpoint(label: string, username: string) {
   const snapshot = await takeSnapshot();
   await prisma.checkpoint.create({ data: { label, username, snapshot } });
   await pruneOldCheckpoints();
-}
-
-/**
- * Cria um checkpoint só se a última alteração registrada foi há mais de COALESCE_WINDOW_MS — chame
- * isso ANTES de aplicar a mutação, pra que o snapshot capture o estado "antes dela". `labelFn` só é
- * chamada quando um checkpoint novo de fato vai ser criado (pode buscar dados extra pro texto sem
- * pesar nas chamadas que caem na janela de agrupamento, que são a maioria).
- */
-export async function maybeCreateCheckpoint(
-  username: string,
-  labelFn: () => string | Promise<string>,
-) {
-  const last = await prisma.checkpoint.findFirst({
-    orderBy: { createdAt: 'desc' },
-    select: { createdAt: true },
-  });
-  if (last && Date.now() - last.createdAt.getTime() < COALESCE_WINDOW_MS) return;
-
-  await createCheckpoint(await labelFn(), username);
 }
 
 /** Reverte Camera + CameraModel + BackgroundMap pro estado gravado no checkpoint. */

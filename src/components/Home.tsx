@@ -184,6 +184,7 @@ export default function Home({ role, userName }: HomeProps) {
     const created = (await res.json()) as CameraDTO;
     setCameras((prev) => [...prev, created]);
     setSelectedId(created.id);
+    loadCheckpoints();
   }
 
   async function handleCameraMove(id: string, positionX: number, positionY: number) {
@@ -194,6 +195,7 @@ export default function Home({ role, userName }: HomeProps) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ positionX, positionY }),
     });
+    loadCheckpoints();
   }
 
   async function handleFieldChange(id: string, field: keyof CameraDTO, value: string | number) {
@@ -207,6 +209,7 @@ export default function Home({ role, userName }: HomeProps) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [field]: value }),
     });
+    loadCheckpoints();
   }
 
   async function handleModelChange(id: string, cameraModelId: string) {
@@ -229,6 +232,7 @@ export default function Home({ role, userName }: HomeProps) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     });
+    loadCheckpoints();
   }
 
   async function handleDelete(id: string) {
@@ -236,6 +240,7 @@ export default function Home({ role, userName }: HomeProps) {
     setCameras((prev) => prev.filter((c) => c.id !== id));
     if (selectedId === id) setSelectedId(null);
     await fetch(`/api/cameras/${id}`, { method: 'DELETE' });
+    loadCheckpoints();
   }
 
   function toggleHidden(id: string) {
@@ -285,6 +290,7 @@ export default function Home({ role, userName }: HomeProps) {
       setBackgroundMap(created);
       setUploadName('');
       form.reset();
+      loadCheckpoints();
     } finally {
       setUploading(false);
     }
@@ -325,6 +331,7 @@ export default function Home({ role, userName }: HomeProps) {
     const updated = (await res.json()) as BackgroundMapDTO;
     setBackgroundMap(updated);
     handleCancelCalibration();
+    loadCheckpoints();
   }
 
   // As câmeras importadas do NetBox guardam a localização crua em notes: "Local (NetBox): <site>"
@@ -412,6 +419,7 @@ export default function Home({ role, userName }: HomeProps) {
       setMarkingLocationName(pickNextUnmarkedLocation(markingLocationName, next));
       return next;
     });
+    loadCheckpoints();
   }
 
   // Filtra a visualização por área: esmaece as demais câmeras e enquadra o zoom nessa área
@@ -465,6 +473,7 @@ export default function Home({ role, userName }: HomeProps) {
     if (applyInput.checked) {
       loadCameras();
     }
+    loadCheckpoints();
   }
 
   // Não depende de editMode: é preferência do usuário (pessoal ou global, se admin), não dado da
