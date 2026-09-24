@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { isAuthError, requireAdminSession } from '@/lib/getSession';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads');
 
@@ -15,6 +16,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const session = await requireAdminSession();
+  if (isAuthError(session)) {
+    return NextResponse.json({ error: session.error }, { status: session.status });
+  }
+
   const formData = await request.formData();
   const file = formData.get('image');
   const name = formData.get('name');

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cameraInputSchema } from '@/types/camera';
+import { isAuthError, requireAdminSession } from '@/lib/getSession';
 
 export async function GET() {
   const cameras = await prisma.camera.findMany({
@@ -11,6 +12,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const session = await requireAdminSession();
+  if (isAuthError(session)) {
+    return NextResponse.json({ error: session.error }, { status: session.status });
+  }
+
   const body = await request.json();
   const parsed = cameraInputSchema.safeParse(body);
 

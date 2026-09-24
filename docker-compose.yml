@@ -26,6 +26,16 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://cftv:cftv@db:5432/cftv_design?schema=public}
       NODE_ENV: development
       WATCHPACK_POLLING: "true" # necessário para hot-reload funcionar com bind mount no Windows/Docker Desktop
+      SESSION_SECRET: ${SESSION_SECRET}
+      AD_SERVER: ${AD_SERVER}
+      AD_PORT: ${AD_PORT:-389}
+      AD_USE_SSL: ${AD_USE_SSL:-false}
+      AD_DOMAIN: ${AD_DOMAIN}
+      AD_BASE_DN: ${AD_BASE_DN}
+      AD_ADMIN_GROUP_CN: ${AD_ADMIN_GROUP_CN}
+      AD_OPERATOR_GROUP_CN: ${AD_OPERATOR_GROUP_CN}
+      DEV_MODE: ${DEV_MODE:-false}
+      DEV_USERS: ${DEV_USERS:-} # vazio == "{}" (tratado no código)
     ports:
       - "3000:3000"
     volumes:

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { isAuthError, requireAdminSession } from '@/lib/getSession';
 
 const patchSchema = z.object({
   fovHorizontalMaxDeg: z.number().positive().nullable().optional(),
@@ -16,6 +17,11 @@ interface RouteParams {
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const session = await requireAdminSession();
+  if (isAuthError(session)) {
+    return NextResponse.json({ error: session.error }, { status: session.status });
+  }
+
   const body = await request.json();
   const parsed = patchSchema.safeParse(body);
 
