@@ -14,6 +14,14 @@ const STATUS_COLORS: Record<string, string> = {
   MAINTENANCE: '#f59e0b',
 };
 
+// Qualquer status fora de ACTIVE/PLANNED significa "sem cobertura real agora" — o cone é
+// destacado nessa cor de alerta, independente do status exato (INACTIVE, MAINTENANCE, etc.),
+// pra chamar atenção mesmo sem abrir o painel de detalhes da câmera.
+const INOPERATIVE_CONE_COLOR = '#ef4444';
+function isInoperativeStatus(status: string) {
+  return status !== 'ACTIVE' && status !== 'PLANNED';
+}
+
 const MIN_SCALE = 0.02;
 const MAX_SCALE = 10;
 const ZOOM_SPEED = 1.05;
@@ -232,6 +240,8 @@ export default function CctvCanvas({
             const focusColor = isFocused
               ? FOCUS_PALETTE[nextFocusColorIndex++ % FOCUS_PALETTE.length]
               : null;
+            const isInoperative = isInoperativeStatus(camera.status);
+            const coneColor = focusColor ?? (isInoperative ? INOPERATIVE_CONE_COLOR : statusColor);
 
             return (
               <Group key={camera.id} listening>
@@ -239,10 +249,12 @@ export default function CctvCanvas({
                   listening={false}
                   points={flattenPoints(sector)}
                   closed
-                  fill={focusColor ?? statusColor}
-                  opacity={isDimmed ? 0.04 : isFocused ? 0.45 : isSelected ? 0.35 : 0.18}
-                  stroke={focusColor ?? statusColor}
-                  strokeWidth={isFocused ? 2.5 : isSelected ? 2 : 1}
+                  fill={coneColor}
+                  opacity={
+                    isDimmed ? 0.04 : isFocused ? 0.45 : isInoperative ? 0.4 : isSelected ? 0.35 : 0.18
+                  }
+                  stroke={coneColor}
+                  strokeWidth={isFocused ? 2.5 : isInoperative ? 2 : isSelected ? 2 : 1}
                   dash={isFocused ? [10, 6] : undefined}
                 />
                 <Circle
