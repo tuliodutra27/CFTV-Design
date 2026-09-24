@@ -36,6 +36,10 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [centerTarget, setCenterTarget] = useState<Point | null>(null);
 
+  // Só existe enquanto a página está aberta (não persiste) — é uma preferência de visualização,
+  // não um dado da câmera.
+  const [hiddenCameraIds, setHiddenCameraIds] = useState<Set<string>>(new Set());
+
   const [markingMode, setMarkingMode] = useState(false);
   const [markingLocationName, setMarkingLocationName] = useState('');
   // Só existe enquanto a página está aberta (não persiste) — é só pra guiar a sequência de
@@ -83,16 +87,21 @@ export default function Home() {
     }
   }, [editMode, calibrating, markingMode]);
 
+  // ResizeObserver (não só o evento "resize" da janela) pra acompanhar mudanças de layout que não
+  // vêm de redimensionar a janela — como o menu lateral recolhendo/expandindo.
   useEffect(() => {
+    const el = canvasWrapperRef.current;
+    if (!el) return;
+
     function updateSize() {
-      const el = canvasWrapperRef.current;
-      if (el) {
-        setCanvasSize({ width: el.clientWidth, height: el.clientHeight });
-      }
+      if (!el) return;
+      setCanvasSize({ width: el.clientWidth, height: el.clientHeight });
     }
+
     updateSize();
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   async function handleCanvasClick(positionX: number, positionY: number) {
@@ -167,6 +176,15 @@ export default function Home() {
     setCameras((prev) => prev.filter((c) => c.id !== id));
     if (selectedId === id) setSelectedId(null);
     await fetch(`/api/cameras/${id}`, { method: 'DELETE' });
+  }
+
+  function toggleHidden(id: string) {
+    setHiddenCameraIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   function readImageDimensions(file: File): Promise<{ widthPx: number; heightPx: number }> {
@@ -363,6 +381,32 @@ export default function Home() {
       )
     : null;
 
+  // Ajusta os defaults de FOV/alcance do modelo no catálogo — opcionalmente aplica de uma vez nas
+  // câmeras que já usam esse modelo (senão só valeria pra próxima seleção).
+  async function handleModelSettingsSubmit(e: FormEvent<HTMLFormElement>, modelId: string) {
+    e.preventDefault();
+    if (!editMode) return;
+    const form = e.currentTarget;
+    const fovInput = form.elements.namedItem('fovHorizontalMaxDeg') as HTMLInputElement;
+    const rangeInput = form.elements.namedItem('irRangeMeters') as HTMLInputElement;
+    const applyInput = form.elements.namedItem('applyToExisting') as HTMLInputElement;
+
+    const res = await fetch(`/api/camera-models/${modelId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fovHorizontalMaxDeg: fovInput.value ? Number(fovInput.value) : null,
+        irRangeMeters: rangeInput.value ? Number(rangeInput.value) : null,
+        applyToExistingCameras: applyInput.checked,
+      }),
+    });
+    const updated = (await res.json()) as CameraModelDTO;
+    setCameraModels((prev) => prev.map((m) => (m.id === modelId ? updated : m)));
+    if (applyInput.checked) {
+      loadCameras();
+    }
+  }
+
   function normalize(value: string) {
     return value.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
   }
@@ -374,6 +418,8 @@ export default function Home() {
       )
     : cameras;
 
+  const visibleCameras = cameras.filter((c) => !hiddenCameraIds.has(c.id));
+
   function handleSelectCamera(camera: CameraDTO) {
     setSelectedId(camera.id);
     setCenterTarget({ x: camera.positionX, y: camera.positionY });
@@ -381,56 +427,10 @@ export default function Home() {
 
   return (
     <main style={{ display: 'flex', height: '100vh' }}>
-      <div ref={canvasWrapperRef} style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {!loading && (
-          <CctvCanvas
-            width={canvasSize.width}
-            height={canvasSize.height}
-            cameras={cameras}
-            backgroundImageUrl={backgroundMap?.imageUrl}
-            scaleMetersPerPixel={backgroundMap?.scaleMetersPerPixel ?? 1}
-            editMode={editMode}
-            selectedCameraId={selectedId}
-            onSelectCamera={setSelectedId}
-            onCameraMove={handleCameraMove}
-            onCanvasClick={handleCanvasClick}
-            calibrating={calibrating}
-            calibrationPoints={calibrationPoints}
-            onCalibrationPoint={handleCalibrationPoint}
-            onScaleChange={(scale) => setZoomPercent(Math.round(scale * 100))}
-            centerOnMeters={centerTarget}
-            markingMode={markingMode}
-            onLocationMark={handleLocationMark}
-            focusedCameraIds={focusedCameraIds}
-            fitBoundsMeters={fitBounds}
-          />
-        )}
-        <div
-          style={{
-            position: 'absolute',
-            top: 12,
-            left: 12,
-            fontSize: 12,
-            color: calibrating || markingMode ? '#facc15' : '#94a3b8',
-            background: 'rgba(15, 23, 42, 0.85)',
-            padding: '4px 8px',
-            borderRadius: 4,
-          }}
-        >
-          {calibrating
-            ? `Calibração: clique em 2 pontos com distância real conhecida (${calibrationPoints.length}/2 marcados)`
-            : markingMode
-              ? `Marcando local (${markedLocations.size}/${locationGroups.length}): clique onde fica "${markingLocationName}" — as câmeras de lá vão se juntar ali`
-              : editMode
-                ? `Clique para adicionar câmera · arraste uma câmera para reposicionar · arraste o fundo para navegar · roda do mouse para zoom (${zoomPercent}%)`
-                : `Somente leitura · arraste o fundo para navegar · roda do mouse para zoom (${zoomPercent}%)`}
-        </div>
-      </div>
-
       <aside
         style={{
           width: sidebarCollapsed ? 56 : 340,
-          borderLeft: '1px solid #1e293b',
+          borderRight: '1px solid #1e293b',
           display: 'flex',
           flexDirection: 'column',
           background: '#0b1220',
@@ -501,6 +501,13 @@ export default function Home() {
                 style={{ background: 'transparent', border: 'none', color: '#38bdf8', fontSize: 18, cursor: 'pointer' }}
               >
                 ▤
+              </button>
+              <button
+                onClick={() => setSidebarCollapsed(false)}
+                title="Configurações"
+                style={{ background: 'transparent', border: 'none', color: '#38bdf8', fontSize: 18, cursor: 'pointer' }}
+              >
+                ⚙
               </button>
             </div>
           ) : (
@@ -677,123 +684,150 @@ export default function Home() {
                   style={{ fontSize: 12, padding: '6px 8px' }}
                 />
 
-                {filteredCameras.map((camera) => (
-                  <div
-                    key={camera.id}
-                    onClick={() => handleSelectCamera(camera)}
-                    style={{
-                      border: camera.id === selectedId ? '1px solid #38bdf8' : '1px solid #1e293b',
-                      borderRadius: 6,
-                      padding: 8,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 6,
-                      cursor: 'pointer',
-                    }}
+                {hiddenCameraIds.size > 0 && (
+                  <button
+                    onClick={() => setHiddenCameraIds(new Set())}
+                    style={{ fontSize: 11, color: '#38bdf8', background: 'transparent', border: 'none', textAlign: 'left', padding: 0, cursor: 'pointer' }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <strong style={{ fontSize: 13 }}>{camera.name}</strong>
-                        <div style={{ fontSize: 10, color: '#64748b' }}>{camera.code}</div>
+                    {hiddenCameraIds.size} oculta(s) no mapa — mostrar todas
+                  </button>
+                )}
+
+                {filteredCameras.map((camera) => {
+                  const isHidden = hiddenCameraIds.has(camera.id);
+                  return (
+                    <div
+                      key={camera.id}
+                      onClick={() => handleSelectCamera(camera)}
+                      style={{
+                        border: camera.id === selectedId ? '1px solid #38bdf8' : '1px solid #1e293b',
+                        borderRadius: 6,
+                        padding: 8,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 6,
+                        cursor: 'pointer',
+                        opacity: isHidden ? 0.55 : 1,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <strong style={{ fontSize: 13 }}>{camera.name}</strong>
+                          <div style={{ fontSize: 10, color: '#64748b' }}>
+                            {camera.code}
+                            {isHidden && ' · oculta no mapa'}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleHidden(camera.id);
+                            }}
+                            style={{ background: 'transparent', border: 'none', color: '#38bdf8', fontSize: 11 }}
+                          >
+                            {isHidden ? 'Mostrar' : 'Ocultar'}
+                          </button>
+                          {editMode && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(camera.id);
+                              }}
+                              style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: 12 }}
+                            >
+                              remover
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      {editMode && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(camera.id);
-                          }}
-                          style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: 12 }}
-                        >
-                          remover
-                        </button>
-                      )}
-                    </div>
 
-                    <label style={{ fontSize: 11, color: '#94a3b8' }}>
-                      Nome
-                      <input
-                        value={camera.name}
-                        disabled={!editMode}
-                        onChange={(e) => handleFieldChange(camera.id, 'name', e.target.value)}
-                        onBlur={(e) => handleFieldCommit(camera.id, 'name', e.target.value)}
-                      />
-                    </label>
-
-                    <label style={{ fontSize: 11, color: '#94a3b8' }}>
-                      Modelo
-                      <select
-                        value={camera.cameraModelId ?? ''}
-                        disabled={!editMode}
-                        onChange={(e) => handleModelChange(camera.id, e.target.value)}
-                      >
-                        <option value="">— selecionar —</option>
-                        {cameraModels.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.manufacturer} {m.model}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <label style={{ fontSize: 11, color: '#94a3b8', flex: 1 }}>
-                        Azimute (°)
+                      <label style={{ fontSize: 11, color: '#94a3b8' }}>
+                        Nome
                         <input
-                          type="number"
-                          min={0}
-                          max={360}
-                          value={camera.azimuth}
+                          value={camera.name}
                           disabled={!editMode}
-                          onChange={(e) => handleFieldChange(camera.id, 'azimuth', Number(e.target.value))}
-                          onBlur={(e) => handleFieldCommit(camera.id, 'azimuth', Number(e.target.value))}
+                          onChange={(e) => handleFieldChange(camera.id, 'name', e.target.value)}
+                          onBlur={(e) => handleFieldCommit(camera.id, 'name', e.target.value)}
                         />
                       </label>
-                      <label style={{ fontSize: 11, color: '#94a3b8', flex: 1 }}>
-                        Abertura (°)
-                        <input
-                          type="number"
-                          min={1}
-                          max={360}
-                          value={camera.fovAngle}
-                          disabled={!editMode}
-                          onChange={(e) => handleFieldChange(camera.id, 'fovAngle', Number(e.target.value))}
-                          onBlur={(e) => handleFieldCommit(camera.id, 'fovAngle', Number(e.target.value))}
-                        />
-                      </label>
-                    </div>
 
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <label style={{ fontSize: 11, color: '#94a3b8', flex: 1 }}>
-                        Alcance (m)
-                        <input
-                          type="number"
-                          min={1}
-                          value={camera.rangeMeters}
-                          disabled={!editMode}
-                          onChange={(e) => handleFieldChange(camera.id, 'rangeMeters', Number(e.target.value))}
-                          onBlur={(e) => handleFieldCommit(camera.id, 'rangeMeters', Number(e.target.value))}
-                        />
-                      </label>
-                      <label style={{ fontSize: 11, color: '#94a3b8', flex: 1 }}>
-                        Status
+                      <label style={{ fontSize: 11, color: '#94a3b8' }}>
+                        Modelo
                         <select
-                          value={camera.status}
+                          value={camera.cameraModelId ?? ''}
                           disabled={!editMode}
-                          onChange={(e) => {
-                            const value = e.target.value as CameraStatus;
-                            handleFieldChange(camera.id, 'status', value);
-                            handleFieldCommit(camera.id, 'status', value);
-                          }}
+                          onChange={(e) => handleModelChange(camera.id, e.target.value)}
                         >
-                          <option value="PLANNED">Planejada</option>
-                          <option value="ACTIVE">Ativa</option>
-                          <option value="INACTIVE">Inativa</option>
-                          <option value="MAINTENANCE">Manutenção</option>
+                          <option value="">— selecionar —</option>
+                          {cameraModels.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.manufacturer} {m.model}
+                            </option>
+                          ))}
                         </select>
                       </label>
+
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <label style={{ fontSize: 11, color: '#94a3b8', flex: 1 }}>
+                          Azimute (°)
+                          <input
+                            type="number"
+                            min={0}
+                            max={360}
+                            value={camera.azimuth}
+                            disabled={!editMode}
+                            onChange={(e) => handleFieldChange(camera.id, 'azimuth', Number(e.target.value))}
+                            onBlur={(e) => handleFieldCommit(camera.id, 'azimuth', Number(e.target.value))}
+                          />
+                        </label>
+                        <label style={{ fontSize: 11, color: '#94a3b8', flex: 1 }}>
+                          Abertura (°)
+                          <input
+                            type="number"
+                            min={1}
+                            max={360}
+                            value={camera.fovAngle}
+                            disabled={!editMode}
+                            onChange={(e) => handleFieldChange(camera.id, 'fovAngle', Number(e.target.value))}
+                            onBlur={(e) => handleFieldCommit(camera.id, 'fovAngle', Number(e.target.value))}
+                          />
+                        </label>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <label style={{ fontSize: 11, color: '#94a3b8', flex: 1 }}>
+                          Alcance (m)
+                          <input
+                            type="number"
+                            min={1}
+                            value={camera.rangeMeters}
+                            disabled={!editMode}
+                            onChange={(e) => handleFieldChange(camera.id, 'rangeMeters', Number(e.target.value))}
+                            onBlur={(e) => handleFieldCommit(camera.id, 'rangeMeters', Number(e.target.value))}
+                          />
+                        </label>
+                        <label style={{ fontSize: 11, color: '#94a3b8', flex: 1 }}>
+                          Status
+                          <select
+                            value={camera.status}
+                            disabled={!editMode}
+                            onChange={(e) => {
+                              const value = e.target.value as CameraStatus;
+                              handleFieldChange(camera.id, 'status', value);
+                              handleFieldCommit(camera.id, 'status', value);
+                            }}
+                          >
+                            <option value="PLANNED">Planejada</option>
+                            <option value="ACTIVE">Ativa</option>
+                            <option value="INACTIVE">Inativa</option>
+                            <option value="MAINTENANCE">Manutenção</option>
+                          </select>
+                        </label>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {!loading && cameras.length === 0 && (
                   <p style={{ fontSize: 12, color: '#64748b' }}>
@@ -807,6 +841,68 @@ export default function Home() {
                     Nenhuma câmera encontrada para &quot;{searchQuery}&quot;.
                   </p>
                 )}
+              </MenuSection>
+
+              <MenuSection icon="⚙" label="Configurações">
+                <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>
+                  Ajusta os defaults de FOV/alcance de cada modelo do catálogo (afeta o
+                  autopreenchimento ao selecionar o modelo numa câmera).
+                </p>
+
+                {cameraModels.map((m) => (
+                  <form
+                    key={m.id}
+                    onSubmit={(e) => handleModelSettingsSubmit(e, m.id)}
+                    style={{
+                      border: '1px solid #1e293b',
+                      borderRadius: 6,
+                      padding: 8,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6,
+                    }}
+                  >
+                    <strong style={{ fontSize: 12 }}>
+                      {m.manufacturer} {m.model}
+                    </strong>
+
+                    {editMode ? (
+                      <>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <label style={{ fontSize: 11, color: '#94a3b8', flex: 1 }}>
+                            FOV máx (°)
+                            <input
+                              name="fovHorizontalMaxDeg"
+                              type="number"
+                              step="0.1"
+                              defaultValue={m.fovHorizontalMaxDeg ?? ''}
+                            />
+                          </label>
+                          <label style={{ fontSize: 11, color: '#94a3b8', flex: 1 }}>
+                            Alcance IR (m)
+                            <input
+                              name="irRangeMeters"
+                              type="number"
+                              step="0.1"
+                              defaultValue={m.irRangeMeters ?? ''}
+                            />
+                          </label>
+                        </div>
+                        <label style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <input name="applyToExisting" type="checkbox" defaultChecked />
+                          Atualizar câmeras que já usam esse modelo
+                        </label>
+                        <button type="submit" style={{ fontSize: 11 }}>
+                          Salvar
+                        </button>
+                      </>
+                    ) : (
+                      <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                        FOV máx: {m.fovHorizontalMaxDeg ?? '—'}° · Alcance IR: {m.irRangeMeters ?? '—'}m
+                      </div>
+                    )}
+                  </form>
+                ))}
               </MenuSection>
             </>
           )}
@@ -832,6 +928,52 @@ export default function Home() {
           {!sidebarCollapsed && <span>Recolher menu</span>}
         </button>
       </aside>
+
+      <div ref={canvasWrapperRef} style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        {!loading && (
+          <CctvCanvas
+            width={canvasSize.width}
+            height={canvasSize.height}
+            cameras={visibleCameras}
+            backgroundImageUrl={backgroundMap?.imageUrl}
+            scaleMetersPerPixel={backgroundMap?.scaleMetersPerPixel ?? 1}
+            editMode={editMode}
+            selectedCameraId={selectedId}
+            onSelectCamera={setSelectedId}
+            onCameraMove={handleCameraMove}
+            onCanvasClick={handleCanvasClick}
+            calibrating={calibrating}
+            calibrationPoints={calibrationPoints}
+            onCalibrationPoint={handleCalibrationPoint}
+            onScaleChange={(scale) => setZoomPercent(Math.round(scale * 100))}
+            centerOnMeters={centerTarget}
+            markingMode={markingMode}
+            onLocationMark={handleLocationMark}
+            focusedCameraIds={focusedCameraIds}
+            fitBoundsMeters={fitBounds}
+          />
+        )}
+        <div
+          style={{
+            position: 'absolute',
+            top: 12,
+            left: 12,
+            fontSize: 12,
+            color: calibrating || markingMode ? '#facc15' : '#94a3b8',
+            background: 'rgba(15, 23, 42, 0.85)',
+            padding: '4px 8px',
+            borderRadius: 4,
+          }}
+        >
+          {calibrating
+            ? `Calibração: clique em 2 pontos com distância real conhecida (${calibrationPoints.length}/2 marcados)`
+            : markingMode
+              ? `Marcando local (${markedLocations.size}/${locationGroups.length}): clique onde fica "${markingLocationName}" — as câmeras de lá vão se juntar ali`
+              : editMode
+                ? `Clique para adicionar câmera · arraste uma câmera para reposicionar · arraste o fundo para navegar · roda do mouse para zoom (${zoomPercent}%)`
+                : `Somente leitura · arraste o fundo para navegar · roda do mouse para zoom (${zoomPercent}%)`}
+        </div>
+      </div>
     </main>
   );
 }

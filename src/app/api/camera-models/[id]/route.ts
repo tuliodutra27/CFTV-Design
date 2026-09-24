@@ -1,0 +1,44 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { prisma } from '@/lib/prisma';
+
+const patchSchema = z.object({
+  fovHorizontalMaxDeg: z.number().positive().nullable().optional(),
+  fovHorizontalMinDeg: z.number().positive().nullable().optional(),
+  irRangeMeters: z.number().positive().nullable().optional(),
+  // Quando true, também atualiza fovAngle/rangeMeters de toda Camera que já usa este modelo —
+  // sem isso, a correção só valeria pra próxima vez que alguém selecionar o modelo.
+  applyToExistingCameras: z.boolean().optional(),
+});
+
+interface RouteParams {
+  params: { id: string };
+}
+
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  const body = await request.json();
+  const parsed = patchSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const { applyToExistingCameras, ...data } = parsed.data;
+
+  const model = await prisma.cameraModel.update({
+    where: { id: params.id },
+    data,
+  });
+
+  if (applyToExistingCameras) {
+    await prisma.camera.updateMany({
+      where: { cameraModelId: model.id },
+      data: {
+        ...(model.fovHorizontalMaxDeg != null ? { fovAngle: model.fovHorizontalMaxDeg } : {}),
+        ...(model.irRangeMeters != null ? { rangeMeters: model.irRangeMeters } : {}),
+      },
+    });
+  }
+
+  return NextResponse.json(model);
+}
