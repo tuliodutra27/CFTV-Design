@@ -136,6 +136,26 @@ model RangeColorSetting {
   updatedAt DateTime @updatedAt
 }
 
+/// Ponto de restauração: snapshot completo de Camera + CameraModel + BackgroundMap tirado logo
+/// antes de uma alteração administrativa (criar/mover/editar/remover câmera, trocar/calibrar mapa
+/// de fundo, editar defaults de modelo). Criado no máximo 1x a cada ~10s por ação em sequência (ver
+/// src/lib/checkpoint.ts) pra não virar um registro por campo editado. Obstacle/CoverageZone (Fase
+/// 2, ainda sem uso) ficam de fora por enquanto — e RangeColorSetting fica de fora de propósito, é
+/// preferência pessoal/estética, não dado do projeto.
+model Checkpoint {
+  id String @id @default(cuid())
+
+  label    String // descrição curta e legível da ação que estava prestes a acontecer
+  username String // quem disparou a ação que gerou o checkpoint
+
+  /// Estado completo antes da ação: { cameras: Camera[], cameraModels: CameraModel[], backgroundMaps: BackgroundMap[] }
+  snapshot Json
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 /// Metadados da imagem de fundo (planta/imagem de drone) e sua calibração metro↔pixel.
 model BackgroundMap {
   id String @id @default(cuid())

@@ -4,6 +4,7 @@ import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { isAuthError, requireAdminSession } from '@/lib/getSession';
+import { maybeCreateCheckpoint } from '@/lib/checkpoint';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads');
 
@@ -33,6 +34,10 @@ export async function POST(request: NextRequest) {
   if (!Number.isFinite(widthPx) || !Number.isFinite(heightPx) || widthPx <= 0 || heightPx <= 0) {
     return NextResponse.json({ error: 'widthPx e heightPx inválidos' }, { status: 400 });
   }
+
+  // Antes de trocar (o registro antigo fica só desativado, não apagado, mas a escala calibrada
+  // some da tela até recalibrar de novo) — dá pra desfazer a troca de imagem com um clique.
+  await maybeCreateCheckpoint(session.username, () => `Nova imagem de fundo enviada ("${name}")`);
 
   await mkdir(UPLOAD_DIR, { recursive: true });
   const ext = path.extname(file.name) || '.jpg';

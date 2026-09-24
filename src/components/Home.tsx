@@ -24,6 +24,17 @@ interface RangeColorResponse {
   scope: RangeColorScope;
 }
 
+interface CheckpointDTO {
+  id: string;
+  label: string;
+  username: string;
+  createdAt: string;
+}
+
+function formatCheckpointTime(iso: string) {
+  return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' });
+}
+
 interface HomeProps {
   role: Role;
   userName: string;
@@ -73,6 +84,9 @@ export default function Home({ role, userName }: HomeProps) {
   const [rangeColorScope, setRangeColorScope] = useState<RangeColorScope>('default');
   const [savingRangeColor, setSavingRangeColor] = useState(false);
 
+  const [checkpoints, setCheckpoints] = useState<CheckpointDTO[]>([]);
+  const [restoringCheckpointId, setRestoringCheckpointId] = useState<string | null>(null);
+
   const loadCameras = useCallback(async () => {
     const res = await fetch('/api/cameras');
     const data = (await res.json()) as CameraDTO[];
@@ -99,12 +113,22 @@ export default function Home({ role, userName }: HomeProps) {
     setRangeColorScope(data.scope);
   }, []);
 
+  // Só admin pode restaurar (todas as rotas de mutação exigem admin) — nem busca a lista pro
+  // Operador, evita um fetch que sempre voltaria 401.
+  const loadCheckpoints = useCallback(async () => {
+    const res = await fetch('/api/checkpoints');
+    if (!res.ok) return;
+    const data = (await res.json()) as CheckpointDTO[];
+    setCheckpoints(data);
+  }, []);
+
   useEffect(() => {
     loadCameras();
     loadCameraModels();
     loadBackgroundMap();
     loadRangeColor();
-  }, [loadCameras, loadCameraModels, loadBackgroundMap, loadRangeColor]);
+    if (canEdit) loadCheckpoints();
+  }, [loadCameras, loadCameraModels, loadBackgroundMap, loadRangeColor, loadCheckpoints, canEdit]);
 
   useEffect(() => {
     if (!editMode && calibrating) {
@@ -459,6 +483,30 @@ export default function Home({ role, userName }: HomeProps) {
       setRangeColorScope(data.scope);
     } finally {
       setSavingRangeColor(false);
+    }
+  }
+
+  async function handleRestoreCheckpoint(checkpoint: CheckpointDTO) {
+    if (!canEdit) return;
+    const confirmed = window.confirm(
+      `Restaurar pra "${checkpoint.label}" (${formatCheckpointTime(checkpoint.createdAt)})?\n\n` +
+        'Isso substitui TODAS as câmeras, modelos e mapas de fundo atuais pelo estado salvo nesse ' +
+        'ponto. O estado atual é salvo como um novo checkpoint antes, então dá pra desfazer.',
+    );
+    if (!confirmed) return;
+
+    setRestoringCheckpointId(checkpoint.id);
+    try {
+      const res = await fetch(`/api/checkpoints/${checkpoint.id}/restore`, { method: 'POST' });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        window.alert(body?.error ?? 'Não foi possível restaurar esse checkpoint.');
+        return;
+      }
+      setSelectedId(null);
+      await Promise.all([loadCameras(), loadCameraModels(), loadBackgroundMap(), loadCheckpoints()]);
+    } finally {
+      setRestoringCheckpointId(null);
     }
   }
 
@@ -1066,6 +1114,47 @@ export default function Home({ role, userName }: HomeProps) {
                   </form>
                 ))}
               </MenuSection>
+
+              {canEdit && (
+                <MenuSection icon="↺" label="Histórico" badge={checkpoints.length || undefined}>
+                  <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>
+                    Pontos de restauração automáticos, gravados antes de cada alteração (câmeras,
+                    mapa de fundo, catálogo de modelos). Restaurar substitui os dados atuais pelo
+                    estado salvo — o estado de agora também vira um checkpoint antes, então dá pra
+                    voltar.
+                  </p>
+
+                  {checkpoints.length === 0 && (
+                    <p style={{ fontSize: 12, color: '#64748b' }}>Nenhum checkpoint ainda.</p>
+                  )}
+
+                  {checkpoints.map((checkpoint) => (
+                    <div
+                      key={checkpoint.id}
+                      style={{
+                        border: '1px solid #1e293b',
+                        borderRadius: 6,
+                        padding: 8,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 4,
+                      }}
+                    >
+                      <strong style={{ fontSize: 12 }}>{checkpoint.label}</strong>
+                      <span style={{ fontSize: 10, color: '#64748b' }}>
+                        {formatCheckpointTime(checkpoint.createdAt)} · {checkpoint.username}
+                      </span>
+                      <button
+                        onClick={() => handleRestoreCheckpoint(checkpoint)}
+                        disabled={restoringCheckpointId !== null}
+                        style={{ fontSize: 11, alignSelf: 'flex-start' }}
+                      >
+                        {restoringCheckpointId === checkpoint.id ? 'Restaurando...' : 'Restaurar'}
+                      </button>
+                    </div>
+                  ))}
+                </MenuSection>
+              )}
             </>
           )}
         </div>

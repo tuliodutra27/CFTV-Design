@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cameraUpdateSchema } from '@/types/camera';
 import { isAuthError, requireAdminSession } from '@/lib/getSession';
+import { maybeCreateCheckpoint } from '@/lib/checkpoint';
 
 interface RouteParams {
   params: { id: string };
@@ -20,6 +21,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  await maybeCreateCheckpoint(session.username, async () => {
+    const current = await prisma.camera.findUnique({ where: { id: params.id }, select: { name: true } });
+    return `Câmera "${current?.name ?? params.id}" editada`;
+  });
+
   const camera = await prisma.camera.update({
     where: { id: params.id },
     data: parsed.data,
@@ -34,6 +40,11 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   if (isAuthError(session)) {
     return NextResponse.json({ error: session.error }, { status: session.status });
   }
+
+  await maybeCreateCheckpoint(session.username, async () => {
+    const current = await prisma.camera.findUnique({ where: { id: params.id }, select: { name: true } });
+    return `Câmera "${current?.name ?? params.id}" removida`;
+  });
 
   await prisma.camera.delete({ where: { id: params.id } });
   return new NextResponse(null, { status: 204 });
